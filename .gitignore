@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# dotenv
+.env
+
+# Streamlit
+.streamlit/
+
+# IDEs
+.idea/
+.vscode/
+
+# Other
+dist/
+build/
+*.egg-info/
