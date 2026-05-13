@@ -32,6 +32,22 @@ def _render_sidebar():
         help="若不设置环境变量，请在此填入 API Key",
     )
 
+    env_api_base = os.environ.get("OPENAI_BASE_URL", "")
+    api_base_input = st.sidebar.text_input(
+        "API 地址",
+        value=env_api_base,
+        placeholder="https://api.openai.com/v1",
+        help="默认为 OpenAI 官方地址，可填入代理或兼容接口地址",
+    )
+
+    env_model = os.environ.get("OPENAI_MODEL", "gpt-3.5-turbo")
+    model_name_input = st.sidebar.text_input(
+        "模型名称",
+        value=env_model,
+        placeholder="gpt-3.5-turbo",
+        help="例如 gpt-4o、deepseek-chat、qwen-turbo 等",
+    )
+
     st.sidebar.markdown("---")
 
     st.sidebar.markdown("### 创作参数")
@@ -81,6 +97,8 @@ def _render_sidebar():
 
     return {
         "api_key": api_key_input.strip(),
+        "api_base": api_base_input.strip(),
+        "model": model_name_input.strip(),
         "temperature": temperature,
         "style_intensity": style_intensity,
         "target_word_count": target_word_count,
@@ -216,6 +234,8 @@ def main():
                     style_intensity=settings["style_intensity"],
                     target_word_count=settings["target_word_count"],
                     output_mode=settings["output_mode"],
+                    api_base=settings["api_base"] or None,
+                    model=settings["model"] or "gpt-3.5-turbo",
                 )
 
             st.success(f"✅ 以「{target_style}」风格润色完成")
@@ -227,6 +247,7 @@ def main():
                 st.markdown(result)
             with col_meta:
                 st.caption(f"风格：{target_style}")
+                st.caption(f"模型：{settings['model'] or 'gpt-3.5-turbo'}")
                 st.caption(f"强度：{settings['style_intensity']}")
                 st.caption(f"创造性：{settings['temperature']}")
                 if settings["target_word_count"]:

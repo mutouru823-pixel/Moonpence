@@ -96,6 +96,8 @@ def generate_style_transfer(
     style_intensity: str = "适中",
     target_word_count: Optional[int] = None,
     output_mode: str = "纯文本",
+    api_base: Optional[str] = None,
+    model: str = "gpt-3.5-turbo",
 ) -> str:
     """
     使用 OpenAI 的 Chat API 将文本重写为目标作家风格。
@@ -108,6 +110,8 @@ def generate_style_transfer(
     - style_intensity: 风格化强度 ("轻度", "适中", "重度")
     - target_word_count: 目标字数（可选，None 表示不限制）
     - output_mode: 输出模式 ("纯文本", "逐段对照", "润色+解析")
+    - api_base: API 地址（可选，用于代理或兼容接口）
+    - model: 模型名称（默认 gpt-3.5-turbo）
 
     返回值：重写后的文本（字符串）
     """
@@ -121,6 +125,8 @@ def generate_style_transfer(
         raise ValueError("目标作家风格不能为空。")
 
     openai.api_key = api_key
+    if api_base:
+        openai.api_base = api_base
 
     system_prompt = _build_system_prompt(target_style)
 
@@ -167,7 +173,7 @@ def generate_style_transfer(
 
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+            model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
