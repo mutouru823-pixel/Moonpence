@@ -2,7 +2,6 @@
 llm_service.py
 封装与 LLM API 交互的函数，支持多作家风格迁移与精细参数控制。
 """
-import os
 from typing import Optional
 
 import openai
@@ -88,6 +87,60 @@ def _build_system_prompt(target_style: str) -> str:
         )
 
 
+def _call_chat_api(
+    api_key: str,
+    api_base: Optional[str],
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    temperature: float,
+    max_tokens: int,
+) -> str:
+    """调用 OpenAI 兼容 Chat API，兼容旧版 (0.x) 和新版 (1.x) SDK。"""
+    base_url = None
+    if api_base:
+        base = api_base.rstrip("/")
+        if not base.endswith("/v1"):
+            base = base + "/v1"
+        base_url = base
+
+    try:
+        import openai as _openai
+
+        if hasattr(_openai, "OpenAI"):
+            client = _openai.OpenAI(api_key=api_key, base_url=base_url)
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            return resp.choices[0].message.content.strip()
+        else:
+            _openai.api_key = api_key
+            if base_url:
+                _openai.api_base = base_url
+            resp = _openai.ChatCompletion.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=float(temperature),
+                max_tokens=max_tokens,
+            )
+            choices = resp.get("choices", [])
+            if not choices:
+                raise RuntimeError("模型未返回结果。")
+            return choices[0]["message"]["content"].strip()
+
+    except Exception as e:
+        raise RuntimeError(f"LLM 请求失败：{e}")
+
+
 def generate_style_transfer(
     api_key: Optional[str],
     text: str,
@@ -123,13 +176,6 @@ def generate_style_transfer(
 
     if not target_style or not target_style.strip():
         raise ValueError("目标作家风格不能为空。")
-
-    openai.api_key = api_key
-    if api_base:
-        base = api_base.rstrip("/")
-        if not base.endswith("/v1"):
-            base = base + "/v1"
-        openai.api_base = base
 
     system_prompt = _build_system_prompt(target_style)
 
@@ -174,23 +220,12 @@ def generate_style_transfer(
     max_tokens = target_word_count * 3 if target_word_count else 2000
     max_tokens = max(500, min(max_tokens, 4000))
 
-    try:
-        response = openai.ChatCompletion.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=float(temperature),
-            max_tokens=max_tokens,
-        )
-
-        choices = response.get("choices", [])
-        if not choices:
-            raise RuntimeError("模型未返回结果。")
-
-        generated_text = choices[0]["message"]["content"].strip()
-        return generated_text
-
-    except openai.error.OpenAIError as oe:
-        raise RuntimeError(f"LLM 请求失败：{oe}")
+    return _call_chat_api(
+        api_key=api_key,
+        api_base=api_base,
+        model=model,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        temperature=float(temperature),
+        max_tokens=max_tokens,
+    )
