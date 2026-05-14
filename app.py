@@ -25,7 +25,7 @@ def _render_sidebar():
 
     env_api_key = os.environ.get("OPENAI_API_KEY", "")
     api_key_input = st.sidebar.text_input(
-        "OpenAI API Key",
+        "API Key",
         value=env_api_key,
         type="password",
         placeholder="sk-...",
@@ -36,16 +36,16 @@ def _render_sidebar():
     api_base_input = st.sidebar.text_input(
         "API 地址",
         value=env_api_base,
-        placeholder="https://api.openai.com/v1",
-        help="默认为 OpenAI 官方地址，可填入代理或兼容接口地址",
+        placeholder="https://api.deepseek.com",
+        help="DeepSeek / OpenAI / 代理地址，自动补全 /v1",
     )
 
     env_model = os.environ.get("OPENAI_MODEL", "gpt-3.5-turbo")
-    model_name_input = st.sidebar.text_input(
+    model_input = st.sidebar.text_input(
         "模型名称",
         value=env_model,
-        placeholder="gpt-3.5-turbo",
-        help="例如 gpt-4o、deepseek-chat、qwen-turbo 等",
+        placeholder="deepseek-chat",
+        help="例如 deepseek-chat、gpt-4o、qwen-turbo 等",
     )
 
     st.sidebar.markdown("---")
@@ -98,7 +98,7 @@ def _render_sidebar():
     return {
         "api_key": api_key_input.strip(),
         "api_base": api_base_input.strip(),
-        "model": model_name_input.strip(),
+        "model": model_input.strip(),
         "temperature": temperature,
         "style_intensity": style_intensity,
         "target_word_count": target_word_count,
@@ -247,7 +247,6 @@ def main():
                 st.markdown(result)
             with col_meta:
                 st.caption(f"风格：{target_style}")
-                st.caption(f"模型：{settings['model'] or 'gpt-3.5-turbo'}")
                 st.caption(f"强度：{settings['style_intensity']}")
                 st.caption(f"创造性：{settings['temperature']}")
                 if settings["target_word_count"]:

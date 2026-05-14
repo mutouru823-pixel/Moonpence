@@ -100,17 +100,17 @@ def generate_style_transfer(
     model: str = "gpt-3.5-turbo",
 ) -> str:
     """
-    使用 OpenAI 的 Chat API 将文本重写为目标作家风格。
+    使用 OpenAI 兼容的 Chat API 将文本重写为目标作家风格。
 
     参数：
-    - api_key: OpenAI API Key
+    - api_key: API Key
     - text: 待润色的原始文本
     - target_style: 目标作家或风格名称
     - temperature: 模型随机性 (0.0 - 1.0)
     - style_intensity: 风格化强度 ("轻度", "适中", "重度")
     - target_word_count: 目标字数（可选，None 表示不限制）
     - output_mode: 输出模式 ("纯文本", "逐段对照", "润色+解析")
-    - api_base: API 地址（可选，用于代理或兼容接口）
+    - api_base: API 地址（可选，用于 DeepSeek / 代理 / 兼容接口）
     - model: 模型名称（默认 gpt-3.5-turbo）
 
     返回值：重写后的文本（字符串）
@@ -126,7 +126,10 @@ def generate_style_transfer(
 
     openai.api_key = api_key
     if api_base:
-        openai.api_base = api_base
+        base = api_base.rstrip("/")
+        if not base.endswith("/v1"):
+            base = base + "/v1"
+        openai.api_base = base
 
     system_prompt = _build_system_prompt(target_style)
 
