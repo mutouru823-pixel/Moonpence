@@ -39,13 +39,6 @@ def apply_custom_css():
             border-radius: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.06);
         }
-        .writer-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 12px;
-            border-radius: 10px;
-            margin-bottom: 8px;
-        }
         .section-divider {
             margin: 24px 0;
             border: none;
@@ -57,6 +50,12 @@ def apply_custom_css():
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+        }
+        .mobile-tip {
+            background: linear-gradient(135deg, #667eea20 0%, #764ba220 100%);
+            padding: 16px;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -271,6 +270,18 @@ def main():
     # 标题区域
     st.markdown('<h1 class="title-gradient">✍️ 文风溯源</h1>', unsafe_allow_html=True)
     st.caption("Literary Style Transfer — 让你的文字穿越不同作家的灵魂")
+    
+    # 手机端使用提示
+    with st.expander("📱 手机端使用建议", expanded=False):
+        st.markdown("""
+        <div class="mobile-tip">
+            <p>📌 <strong>添加到主屏幕</strong></p>
+            <p><strong>在 iOS (Safari):</strong><br>点击分享按钮 → 选择「添加到主屏幕」</p>
+            <p><strong>在 Android (Chrome):</strong><br>点击菜单 → 选择「添加到主屏幕」或「安装应用」</p>
+            <p>💡 建议竖屏使用，体验更佳！</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
     # 主内容区域
