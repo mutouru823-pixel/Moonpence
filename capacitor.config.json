@@ -1,0 +1,17 @@
+{
+  "appId": "com.wenfengsuyuan.app",
+  "appName": "文风溯源",
+  "webDir": ".",
+  "server": {
+    "url": "你的应用部署地址",
+    "cleartext": true
+  },
+  "android": {
+    "packageName": "com.wenfengsuyuan.app",
+    "buildOptions": {
+      "keystorePath": "",
+      "keystoreAlias": "",
+      "signingType": "apksigner"
+    }
+  }
+}

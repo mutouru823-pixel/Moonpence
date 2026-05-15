@@ -1,0 +1,20 @@
+{
+  "name": "wenfeng-suyuan",
+  "version": "1.0.0",
+  "description": "文风溯源 - 文学风格转换应用",
+  "main": "index.js",
+  "scripts": {
+    "init:android": "npx cap add android",
+    "sync": "npx cap sync",
+    "open:android": "npx cap open android",
+    "build:android": "npx cap sync && cd android && ./gradlew assembleDebug"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/cli": "^6.0.0",
+    "@capacitor/core": "^6.0.0"
+  }
+}
