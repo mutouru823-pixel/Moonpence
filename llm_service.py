@@ -1,10 +1,8 @@
 """
 llm_service.py
-封装与 LLM API 交互的函数，支持多作家风格迁移与精细参数控制。
+封装与 LLM API 交互的函数，支持风格样本学习、精细参数控制、评分迭代和风格混合。
 """
-from typing import Optional
-
-import openai
+from typing import Optional, Dict, Any
 
 
 WRITER_STYLES = {
@@ -67,26 +65,6 @@ SYSTEM_PROMPT_BASE = (
 )
 
 
-def _build_system_prompt(target_style: str) -> str:
-    """根据目标风格构建定制化的系统提示。"""
-    style_desc = WRITER_STYLES.get(target_style)
-    if style_desc:
-        return (
-            f"{SYSTEM_PROMPT_BASE}\n\n"
-            f"【目标作家风格指南】\n"
-            f"目标作家：{target_style}\n"
-            f"风格特征：{style_desc}\n\n"
-            f"请严格遵循以上风格指南进行重写。深入模仿该作家的句式节奏、用词习惯、"
-            f"情感距离和标志性意象。如果合适，可以在不改变原意的前提下融入该作家常用的意象元素。"
-        )
-    else:
-        return (
-            f"{SYSTEM_PROMPT_BASE}\n\n"
-            f"目标风格：{target_style}\n"
-            f"请根据你对这位作家/风格的理解，对文本进行符合该风格的重写。"
-        )
-
-
 def _call_chat_api(
     api_key: str,
     api_base: Optional[str],
@@ -141,6 +119,124 @@ def _call_chat_api(
         raise RuntimeError(f"LLM 请求失败：{e}")
 
 
+def analyze_style_samples(
+    api_key: str,
+    api_base: Optional[str],
+    model: str,
+    samples: str,
+) -> str:
+    """
+    分析用户提供的风格样本，提取风格特征。
+    """
+    system_prompt = (
+        "你是一位资深文学评论家，擅长分析作家的写作风格。"
+        "你的任务是分析提供的文本样本，提取以下信息："
+        "1. 句式特点（平均句长、节奏）"
+        "2. 用词偏好（形容词/动词/名词比例、常用意象）"
+        "3. 情感基调"
+        "4. 叙事视角"
+        "5. 标志性元素"
+        "请用清晰的中文段落总结这些特征。"
+    )
+    user_prompt = f"请分析以下文本的写作风格特征：\n\n{samples}"
+    return _call_chat_api(
+        api_key=api_key,
+        api_base=api_base,
+        model=model,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        temperature=0.3,
+        max_tokens=2000,
+    )
+
+
+def evaluate_result(
+    api_key: str,
+    api_base: Optional[str],
+    model: str,
+    original_text: str,
+    rewritten_text: str,
+    target_style: str,
+    style_blend: Optional[Dict[str, float]] = None,
+) -> str:
+    """
+    评估润色结果，给出评分和改进建议。
+    """
+    target_desc = f"目标风格：{target_style}"
+    if style_blend:
+        blend_desc = [f"{writer} ({weight * 100:.0f}%)" for writer, weight in style_blend.items()]
+        target_desc = f"混合风格：{' + '.join(blend_desc)}"
+    
+    system_prompt = (
+        "你是一位严格公正的文学评论家。请评估以下润色结果："
+        "1. 给出 0-10 的风格相似度评分"
+        "2. 指出哪些地方还不够像目标风格"
+        "3. 给出具体的改进建议"
+        "请用简洁的中文回答，格式清晰。"
+    )
+    
+    user_prompt = (
+        f"原文：\n{original_text}\n\n"
+        f"润色结果：\n{rewritten_text}\n\n"
+        f"{target_desc}\n\n"
+        "请评估这个润色结果。"
+    )
+    
+    return _call_chat_api(
+        api_key=api_key,
+        api_base=api_base,
+        model=model,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        temperature=0.3,
+        max_tokens=1500,
+    )
+
+
+def _build_system_prompt(
+    target_style: str,
+    style_samples: Optional[str] = None,
+    style_analysis: Optional[str] = None,
+    style_blend: Optional[Dict[str, float]] = None,
+) -> str:
+    """根据目标风格、风格混合参数构建定制化的系统提示。"""
+    prompt = SYSTEM_PROMPT_BASE
+    
+    # 处理风格混合
+    if style_blend:
+        prompt += "\n\n【混合风格指南】"
+        for writer, weight in style_blend.items():
+            writer_desc = WRITER_STYLES.get(writer)
+            if writer_desc:
+                prompt += f"\n- {writer} ({weight * 100:.0f}%): {writer_desc}"
+        prompt += f"\n\n请按照上述作家的混合风格进行重写，权重按各比例分配。"
+    else:
+        style_desc = WRITER_STYLES.get(target_style)
+        if style_desc:
+            prompt += f"\n\n【目标作家风格指南】\n目标作家：{target_style}\n风格特征：{style_desc}"
+    
+    if style_samples:
+        prompt += f"\n\n【用户提供的风格样本】\n{style_samples}"
+    
+    if style_analysis:
+        prompt += f"\n\n【风格样本分析结果】\n{style_analysis}"
+    
+    if style_samples or style_analysis or style_blend:
+        prompt += (
+            "\n\n请严格遵循以上风格指南进行重写。深入模仿该作家的句式节奏、用词习惯、"
+            "情感距离和标志性意象。如果合适，可以在不改变原意的前提下融入该作家常用的意象元素。"
+        )
+    elif style_desc:
+        prompt += (
+            "\n\n请严格遵循以上风格指南进行重写。深入模仿该作家的句式节奏、用词习惯、"
+            "情感距离和标志性意象。如果合适，可以在不改变原意的前提下融入该作家常用的意象元素。"
+        )
+    else:
+        prompt += f"\n\n目标风格：{target_style}\n请根据你对这位作家/风格的理解，对文本进行符合该风格的重写。"
+    
+    return prompt
+
+
 def generate_style_transfer(
     api_key: Optional[str],
     text: str,
@@ -151,6 +247,10 @@ def generate_style_transfer(
     output_mode: str = "纯文本",
     api_base: Optional[str] = None,
     model: str = "gpt-3.5-turbo",
+    style_samples: Optional[str] = None,
+    style_analysis: Optional[str] = None,
+    style_blend: Optional[Dict[str, float]] = None,
+    evaluation_feedback: Optional[str] = None,
 ) -> str:
     """
     使用 OpenAI 兼容的 Chat API 将文本重写为目标作家风格。
@@ -165,6 +265,10 @@ def generate_style_transfer(
     - output_mode: 输出模式 ("纯文本", "逐段对照", "润色+解析")
     - api_base: API 地址（可选，用于 DeepSeek / 代理 / 兼容接口）
     - model: 模型名称（默认 gpt-3.5-turbo）
+    - style_samples: 用户提供的风格样本（可选）
+    - style_analysis: 风格样本分析结果（可选）
+    - style_blend: 风格混合配置（可选，字典如 {"江南": 0.7, "村上春树": 0.3}）
+    - evaluation_feedback: 评分反馈（可选，用于迭代优化）
 
     返回值：重写后的文本（字符串）
     """
@@ -175,9 +279,15 @@ def generate_style_transfer(
         raise ValueError("待处理文本为空。")
 
     if not target_style or not target_style.strip():
-        raise ValueError("目标作家风格不能为空。")
+        if not style_blend:
+            raise ValueError("目标作家风格或风格混合配置不能为空。")
 
-    system_prompt = _build_system_prompt(target_style)
+    system_prompt = _build_system_prompt(
+        target_style=target_style,
+        style_samples=style_samples,
+        style_analysis=style_analysis,
+        style_blend=style_blend,
+    )
 
     intensity_map = {
         "轻度": "轻度风格化：保留原文的大部分结构和用词，仅在关键处融入目标作家的语感和意象，使文字带有该作家的「气息」即可。",
@@ -203,14 +313,23 @@ def generate_style_transfer(
             "说明你在润色中运用了该作家的哪些风格特征。"
         )
 
-    user_prompt_parts = [
-        f"目标作家/风格：{target_style}",
-        f"风格化强度：{intensity_instruction}",
-    ]
+    user_prompt_parts = []
+    
+    if style_blend:
+        blend_desc = [f"{writer} ({weight * 100:.0f}%)" for writer, weight in style_blend.items()]
+        user_prompt_parts.append(f"混合风格：{' + '.join(blend_desc)}")
+    else:
+        user_prompt_parts.append(f"目标作家/风格：{target_style}")
+    
+    user_prompt_parts.append(f"风格化强度：{intensity_instruction}")
+    
     if word_count_instruction:
         user_prompt_parts.append(word_count_instruction)
     if output_mode_instruction:
         user_prompt_parts.append(output_mode_instruction)
+    
+    if evaluation_feedback:
+        user_prompt_parts.append(f"上次润色的评价反馈：\n{evaluation_feedback}\n\n请根据这些反馈进一步优化润色结果。")
 
     user_prompt_parts.append(f"原文：\n{text}")
     user_prompt_parts.append("请直接按要求输出，不要添加额外解释。")
@@ -229,3 +348,44 @@ def generate_style_transfer(
         temperature=float(temperature),
         max_tokens=max_tokens,
     )
+
+
+def compute_style_features(text: str) -> dict:
+    """
+    计算文本的风格特征，用于可视化对比。
+    返回包含统计信息的字典。
+    """
+    import re
+    
+    # 句子统计
+    sentences = re.split(r'[。！？；]', text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    total_chars = len(text)
+    
+    # 尝试使用 jieba
+    total_words = total_chars  # 备用方案
+    positive_count = 0
+    negative_count = 0
+    avg_sentence_length = total_chars / len(sentences) if sentences else 0
+    
+    try:
+        import jieba
+        words = list(jieba.cut(text))
+        total_words = len(words)
+        
+        # 常见情绪词统计
+        positive_words = ['好', '美', '爱', '快乐', '幸福', '成功', '希望', '光明']
+        negative_words = ['坏', '丑', '恨', '悲伤', '痛苦', '失败', '绝望', '黑暗']
+        positive_count = sum(1 for w in words if w in positive_words)
+        negative_count = sum(1 for w in words if w in negative_words)
+    except ImportError:
+        pass
+    
+    return {
+        "avg_sentence_length": avg_sentence_length,
+        "total_sentences": len(sentences),
+        "total_chars": total_chars,
+        "total_words": total_words,
+        "positive_count": positive_count,
+        "negative_count": negative_count,
+    }
