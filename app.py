@@ -19,7 +19,6 @@ PRESET_WRITERS = list(WRITER_STYLES.keys())
 
 
 def _init_session():
-    # 每次加载都刷新自定义风格，确保最新
     custom_styles = get_custom_styles()
     
     defaults = {
@@ -37,7 +36,6 @@ def _init_session():
         if key not in st.session_state:
             st.session_state[key] = value
     
-    # 确保 custom_styles 始终是最新的
     st.session_state["custom_styles"] = custom_styles
 
 
@@ -347,8 +345,7 @@ def main():
                                         samples=style_samples,
                                     )
                                     st.session_state["style_analysis"] = analysis
-                                    st.session_state["pending_style_name"] = ""
-                                    st.success("✅ 风格分析完成！请设置风格名称并保存")
+                                    st.success("✅ 风格分析完成！请在下方命名并保存")
                                 except Exception as e:
                                     st.error(f"分析失败：{e}")
                 with col_clear:
@@ -358,38 +355,73 @@ def main():
                         st.session_state["pending_style_name"] = ""
                         st.rerun()
 
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+            
+            # 保存自定义风格卡片 - 始终可见！
+            with st.container():
+                st.markdown("""
+                <div class="card">
+                    <div class="card-title">💾 保存为自定义风格</div>
+                    <div class="card-desc">将分析结果或手动输入的风格描述保存，方便以后随时使用</div>
+                """, unsafe_allow_html=True)
+                
                 if st.session_state.get("style_analysis"):
-                    st.markdown("---")
-                    st.markdown("### 📋 已分析的风格特征")
+                    st.markdown("#### 📋 AI 分析结果")
                     st.info(st.session_state["style_analysis"])
-                    
                     st.markdown("---")
-                    st.markdown("### 💾 保存为自定义风格")
-                    
-                    col_name, col_save = st.columns([3, 1])
-                    with col_name:
-                        custom_style_name = st.text_input(
-                            "🎨 给风格起个名字",
-                            value=st.session_state.get("pending_style_name", ""),
-                            placeholder="例如：我的文风、金庸风格、某作家风格……",
-                            help="保存后会出现在「我的自定义风格」区域，随时可以使用"
-                        )
-                        st.session_state["pending_style_name"] = custom_style_name
-                    
-                    with col_save:
-                        st.markdown("")
-                        if st.button("💾 保存", type="primary", use_container_width=True):
-                            if not custom_style_name.strip():
-                                st.error("请先输入风格名称！")
+                
+                style_desc_source = st.radio(
+                    "风格描述来源",
+                    options=["使用AI分析结果", "手动输入风格描述"],
+                    index=0 if st.session_state.get("style_analysis") else 1,
+                    horizontal=True,
+                )
+                
+                style_description = ""
+                if style_desc_source == "使用AI分析结果":
+                    if st.session_state.get("style_analysis"):
+                        style_description = st.session_state["style_analysis"]
+                        st.caption("✅ 将使用上方AI分析出的风格特征")
+                    else:
+                        st.warning("⚠️ 还没有分析结果，请先在上方「风格样本学习」中分析，或切换到「手动输入」")
+                else:
+                    manual_desc = st.text_area(
+                        "✍️ 风格描述",
+                        value="",
+                        height=80,
+                        placeholder="描述你想要的风格特征，例如：文风华丽而细腻，擅长用繁复的比喻和排比营造画面感……",
+                    )
+                    style_description = manual_desc
+                
+                st.markdown("---")
+                
+                col_name, col_save = st.columns([3, 1])
+                with col_name:
+                    custom_style_name = st.text_input(
+                        "🎨 给风格起个名字",
+                        value=st.session_state.get("pending_style_name", ""),
+                        placeholder="例如：我的文风、金庸风格、某作家风格……",
+                        help="保存后会出现在「我的自定义风格」区域，随时可以使用"
+                    )
+                    st.session_state["pending_style_name"] = custom_style_name
+                
+                with col_save:
+                    st.markdown("")
+                    if st.button("💾 保存风格", type="primary", use_container_width=True):
+                        if not custom_style_name.strip():
+                            st.error("请先输入风格名称！")
+                        elif not style_description.strip():
+                            st.error("风格描述为空！请先分析或手动输入")
+                        else:
+                            if save_custom_style(custom_style_name.strip(), style_description):
+                                st.success(f"🎉 成功保存「{custom_style_name}」！现在去右侧「我的自定义风格」使用吧")
+                                st.session_state["custom_styles"] = get_custom_styles()
+                                st.balloons()
+                                st.rerun()
                             else:
-                                with st.spinner("正在保存..."):
-                                    if save_custom_style(custom_style_name.strip(), st.session_state["style_analysis"]):
-                                        st.success(f"🎉 成功保存「{custom_style_name}」！现在去「我的自定义风格」使用吧")
-                                        st.session_state["custom_styles"] = get_custom_styles()
-                                        st.balloons()
-                                        st.rerun()
-                                    else:
-                                        st.error("保存失败，请重试")
+                                st.error("保存失败，请重试")
                 
                 st.markdown('</div>', unsafe_allow_html=True)
 
