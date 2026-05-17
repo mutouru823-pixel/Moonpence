@@ -19,6 +19,9 @@ PRESET_WRITERS = list(WRITER_STYLES.keys())
 
 
 def _init_session():
+    # 每次加载都刷新自定义风格，确保最新
+    custom_styles = get_custom_styles()
+    
     defaults = {
         "history": [],
         "style_samples": "",
@@ -28,11 +31,14 @@ def _init_session():
         "iteration_count": 0,
         "user_style_analysis": "",
         "pending_style_name": "",
-        "custom_styles": get_custom_styles(),
+        "custom_styles": custom_styles,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+    
+    # 确保 custom_styles 始终是最新的
+    st.session_state["custom_styles"] = custom_styles
 
 
 def apply_custom_css():
@@ -352,34 +358,37 @@ def main():
                         st.rerun()
 
                 if st.session_state.get("style_analysis"):
-                    with st.expander("📋 已分析的风格特征", expanded=False):
-                        st.success(st.session_state["style_analysis"])
+                    st.markdown("---")
+                    st.markdown("### 📋 已分析的风格特征")
+                    st.info(st.session_state["style_analysis"])
                     
                     st.markdown("---")
                     st.markdown("### 💾 保存为自定义风格")
                     
-                    col_name, col_save = st.columns([2, 1])
+                    col_name, col_save = st.columns([3, 1])
                     with col_name:
                         custom_style_name = st.text_input(
-                            "🎨 风格名称",
+                            "🎨 给风格起个名字",
                             value=st.session_state.get("pending_style_name", ""),
-                            placeholder="给你的风格起个名字，如：我的文风、金庸风格……",
-                            help="输入风格名称后保存，之后可在作家列表中使用"
+                            placeholder="例如：我的文风、金庸风格、某作家风格……",
+                            help="保存后会出现在「我的自定义风格」区域，随时可以使用"
                         )
                         st.session_state["pending_style_name"] = custom_style_name
                     
                     with col_save:
                         st.markdown("")
-                        if st.button("💾 保存此风格", type="primary", use_container_width=True):
+                        if st.button("💾 保存", type="primary", use_container_width=True):
                             if not custom_style_name.strip():
-                                st.error("请输入风格名称")
+                                st.error("请先输入风格名称！")
                             else:
-                                if save_custom_style(custom_style_name.strip(), st.session_state["style_analysis"]):
-                                    st.success(f"✅ 已保存风格「{custom_style_name}」")
-                                    st.session_state["custom_styles"] = get_custom_styles()
-                                    st.rerun()
-                                else:
-                                    st.error("保存失败，请重试")
+                                with st.spinner("正在保存..."):
+                                    if save_custom_style(custom_style_name.strip(), st.session_state["style_analysis"]):
+                                        st.success(f"🎉 成功保存「{custom_style_name}」！现在去「我的自定义风格」使用吧")
+                                        st.session_state["custom_styles"] = get_custom_styles()
+                                        st.balloons()
+                                        st.rerun()
+                                    else:
+                                        st.error("保存失败，请重试")
                 
                 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -416,7 +425,9 @@ def main():
                     st.markdown("### ✍️ 选择作家")
                     
                     if custom_styles:
+                        st.markdown("---")
                         st.markdown("#### 🎨 我的自定义风格")
+                        
                         custom_cols = st.columns(2)
                         for idx, style_name in enumerate(custom_styles.keys()):
                             col_idx = idx % 2
@@ -432,7 +443,7 @@ def main():
                                     st.session_state["selected_writer"] = style_name
                                     st.session_state["selected_writers"] = []
                         
-                        with st.expander("🗑️ 管理自定义风格", expanded=False):
+                        with st.expander("⚙️ 管理自定义风格", expanded=False):
                             for style_name in list(custom_styles.keys()):
                                 col_del_name, col_del_btn = st.columns([3, 1])
                                 with col_del_name:
@@ -443,9 +454,10 @@ def main():
                                         st.session_state["custom_styles"] = get_custom_styles()
                                         if st.session_state.get("selected_writer") == style_name:
                                             st.session_state["selected_writer"] = ""
+                                        st.success(f"已删除「{style_name}」")
                                         st.rerun()
                         
-                        st.markdown("")
+                        st.markdown("---")
                         st.markdown("#### 📚 预设作家风格")
                     
                     writer_cols = st.columns(2)
