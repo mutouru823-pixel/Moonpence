@@ -134,28 +134,47 @@ def _render_sidebar():
         </div>
         """, unsafe_allow_html=True)
         
-        with st.expander("⚙️ API 配置", expanded=True):
-            env_api_key = os.environ.get("OPENAI_API_KEY", "")
+        env_api_key = os.environ.get("OPENAI_API_KEY", "")
+        env_api_base = os.environ.get("OPENAI_BASE_URL", "")
+        env_model = os.environ.get("OPENAI_MODEL", "gpt-3.5-turbo")
+        
+        has_env_config = bool(env_api_key)
+        
+        if has_env_config:
+            st.success("✅ 已从 .env 文件加载配置")
+        
+        with st.expander("⚙️ API 配置", expanded=not has_env_config):
+            if not has_env_config:
+                st.info("💡 提示：创建 .env 文件可以免去每次输入配置的麻烦！")
+                
+                with st.expander("📋 快速复制 .env 模板", expanded=False):
+                    st.code("""OPENAI_API_KEY=sk-你的API密钥
+OPENAI_BASE_URL=https://api.deepseek.com
+OPENAI_MODEL=deepseek-chat
+""", language="bash")
+                    st.caption("在项目根目录创建文件名为 .env，填入以上内容并修改为你的配置")
+            
             api_key_input = st.text_input(
                 "API Key",
                 value=env_api_key,
                 type="password",
                 placeholder="sk-...",
-                help="若不设置环境变量，请在此填入 API Key",
+                help="若已配置 .env 文件，此处将自动填充",
+                disabled=has_env_config,
             )
 
-            env_api_base = os.environ.get("OPENAI_BASE_URL", "")
             api_base_input = st.text_input(
                 "API 地址",
                 value=env_api_base,
                 placeholder="https://api.deepseek.com",
+                disabled=has_env_config,
             )
 
-            env_model = os.environ.get("OPENAI_MODEL", "gpt-3.5-turbo")
             model_input = st.text_input(
                 "模型名称",
                 value=env_model,
                 placeholder="deepseek-chat",
+                disabled=has_env_config,
             )
 
         with st.expander("🎛️ 创作参数", expanded=False):
