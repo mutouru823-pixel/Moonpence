@@ -422,6 +422,232 @@ def generate_style_transfer(
     )
 
 
+def complete_diary_entry(
+    api_key: Optional[str],
+    notes: str,
+    target_style: str,
+    temperature: float = 0.7,
+    api_base: Optional[str] = None,
+    model: str = "gpt-3.5-turbo",
+    style_samples: Optional[str] = None,
+    style_analysis: Optional[str] = None,
+    style_blend: Optional[Dict[str, float]] = None,
+    date_hint: Optional[str] = None,
+    scene_hint: Optional[str] = None,
+) -> str:
+    """
+    根据简短记录，补全成具有目标文风的日记正文。
+
+    参数：
+    - api_key: API Key
+    - notes: 用户记录的日记要点
+    - target_style: 目标作家或风格名称
+    - temperature: 模型随机性
+    - api_base: API 地址
+    - model: 模型名称
+    - style_samples: 用户提供的风格样本（可选）
+    - style_analysis: 风格样本分析结果（可选）
+    - style_blend: 风格混合配置（可选）
+    - date_hint: 日期提示（可选）
+    - scene_hint: 场景提示（可选）
+
+    返回值：补全后的日记正文（字符串）
+    """
+    if not api_key:
+        raise ValueError("未提供 API Key。请在环境变量或函数参数中设置。")
+
+    if not notes or not notes.strip():
+        raise ValueError("日记要点不能为空。")
+
+    if not target_style or not target_style.strip():
+        if not style_blend:
+            raise ValueError("目标作家风格或风格混合配置不能为空。")
+
+    system_prompt = _build_system_prompt(
+        target_style=target_style,
+        style_samples=style_samples,
+        style_analysis=style_analysis,
+        style_blend=style_blend,
+    )
+    system_prompt += (
+        "\n\n【日记补全任务】"
+        "你将收到用户用简短笔记记录的日记要点，请将其补写成一篇完整、自然、连贯的日记。"
+        "必须保留用户提供的事实、人物、时间、地点和事件，不要擅自新增关键事实或改变时间线。"
+        "可以合理补充过渡句、细节描写和心理活动，让文本更像真实日记，但不要写成空泛抒情。"
+        "优先使用第一人称，语气贴近日常记录。"
+        "如果用户提供了日期或场景提示，请自然融入正文。"
+        "直接输出补全后的日记正文，不要附加说明。"
+    )
+
+    user_prompt_parts = []
+    if style_blend:
+        blend_desc = [f"{writer} ({weight * 100:.0f}%)" for writer, weight in style_blend.items()]
+        user_prompt_parts.append(f"混合风格：{' + '.join(blend_desc)}")
+    else:
+        user_prompt_parts.append(f"目标作家/风格：{target_style}")
+
+    if date_hint:
+        user_prompt_parts.append(f"日期提示：{date_hint}")
+    if scene_hint:
+        user_prompt_parts.append(f"场景提示：{scene_hint}")
+    if style_samples:
+        user_prompt_parts.append(f"风格样本：\n{style_samples}")
+    if style_analysis:
+        user_prompt_parts.append(f"风格分析：\n{style_analysis}")
+
+    user_prompt_parts.append(
+        "请将以下简短记录补写成完整日记，保留事实并尽量贴近目标文风：\n\n"
+        f"{notes.strip()}"
+    )
+    user_prompt_parts.append("请直接输出完整日记正文。")
+
+    user_prompt = "\n\n".join(user_prompt_parts)
+
+    max_tokens = max(700, min(len(notes) * 4, 3500))
+
+    return _call_chat_api(
+        api_key=api_key,
+        api_base=api_base,
+        model=model,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        temperature=float(temperature),
+        max_tokens=max_tokens,
+    )
+
+
+def continue_diary_entry(
+    api_key: Optional[str],
+    previous_entry: str,
+    notes: str,
+    target_style: str,
+    temperature: float = 0.7,
+    api_base: Optional[str] = None,
+    model: str = "gpt-3.5-turbo",
+    style_samples: Optional[str] = None,
+    style_analysis: Optional[str] = None,
+    style_blend: Optional[Dict[str, float]] = None,
+    date_hint: Optional[str] = None,
+    scene_hint: Optional[str] = None,
+) -> str:
+    """
+    根据前一天日记和当日要点，续写成连续多天日记。
+    """
+    if not api_key:
+        raise ValueError("未提供 API Key。请在环境变量或函数参数中设置。")
+
+    if not previous_entry or not previous_entry.strip():
+        raise ValueError("前一天日记不能为空。")
+
+    if not notes or not notes.strip():
+        raise ValueError("当日日记要点不能为空。")
+
+    if not target_style or not target_style.strip():
+        if not style_blend:
+            raise ValueError("目标作家风格或风格混合配置不能为空。")
+
+    system_prompt = _build_system_prompt(
+        target_style=target_style,
+        style_samples=style_samples,
+        style_analysis=style_analysis,
+        style_blend=style_blend,
+    )
+    system_prompt += (
+        "\n\n【连续多天日记任务】"
+        "你将收到前一天的日记正文和今天的简短要点，请续写今天的日记。"
+        "续写时要自然承接前一天的情绪、人物关系、未完成的事情和叙事口吻，形成连续感。"
+        "不要重复前一天已经写过的内容，不要把今天写成独立无关的新文。"
+        "必须保留用户提供的事实、人物、时间、地点和事件，不要擅自新增关键事实或改变时间线。"
+        "优先使用第一人称，语气贴近日常记录。"
+        "如果用户提供了日期或场景提示，请自然融入正文。"
+        "直接输出今天这一篇续写后的完整日记正文，不要附加说明。"
+    )
+
+    user_prompt_parts = []
+    if style_blend:
+        blend_desc = [f"{writer} ({weight * 100:.0f}%)" for writer, weight in style_blend.items()]
+        user_prompt_parts.append(f"混合风格：{' + '.join(blend_desc)}")
+    else:
+        user_prompt_parts.append(f"目标作家/风格：{target_style}")
+
+    if date_hint:
+        user_prompt_parts.append(f"日期提示：{date_hint}")
+    if scene_hint:
+        user_prompt_parts.append(f"场景提示：{scene_hint}")
+    if style_samples:
+        user_prompt_parts.append(f"风格样本：\n{style_samples}")
+    if style_analysis:
+        user_prompt_parts.append(f"风格分析：\n{style_analysis}")
+
+    user_prompt_parts.append(f"前一天日记：\n{previous_entry.strip()}")
+    user_prompt_parts.append(
+        "今天的简短记录：\n"
+        f"{notes.strip()}"
+    )
+    user_prompt_parts.append("请直接输出今天的完整日记正文。")
+
+    user_prompt = "\n\n".join(user_prompt_parts)
+    max_tokens = max(900, min((len(previous_entry) + len(notes)) * 3, 4000))
+
+    return _call_chat_api(
+        api_key=api_key,
+        api_base=api_base,
+        model=model,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        temperature=float(temperature),
+        max_tokens=max_tokens,
+    )
+
+
+def refine_custom_style_description(
+    api_key: Optional[str],
+    api_base: Optional[str],
+    model: str,
+    style_name: str,
+    current_description: str,
+    new_samples: str,
+) -> str:
+    """
+    基于现有自定义风格和新增样本，更新风格描述。
+    """
+    if not api_key:
+        raise ValueError("未提供 API Key。请在环境变量或函数参数中设置。")
+
+    if not style_name or not style_name.strip():
+        raise ValueError("风格名称不能为空。")
+
+    if not current_description or not current_description.strip():
+        raise ValueError("现有风格描述不能为空。")
+
+    if not new_samples or not new_samples.strip():
+        raise ValueError("新增训练文本不能为空。")
+
+    system_prompt = (
+        "你是一位资深的文学风格训练师。你的任务是基于一个已存在的自定义风格，"
+        "结合新增文本样本，输出一份更新后的风格描述。"
+        "要求：1. 保留原有风格的核心特征；2. 吸收新增样本中稳定、重复出现的特征；"
+        "3. 不要把偶发内容误当成核心风格；4. 输出中文、自然、可直接用于后续写作控制。"
+        "请直接输出更新后的风格描述，不要加标题、编号或解释。"
+    )
+    user_prompt = (
+        f"风格名称：{style_name}\n\n"
+        f"现有风格描述：\n{current_description}\n\n"
+        f"新增训练文本：\n{new_samples}\n\n"
+        "请基于以上内容，生成更新后的风格描述。"
+    )
+
+    return _call_chat_api(
+        api_key=api_key,
+        api_base=api_base,
+        model=model,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        temperature=0.3,
+        max_tokens=1800,
+    )
+
+
 def compute_style_features(text: str) -> dict:
     """
     计算文本的风格特征，用于可视化对比。

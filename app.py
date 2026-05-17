@@ -5,6 +5,9 @@ from dotenv import load_dotenv
 
 from llm_service import (
     generate_style_transfer,
+    complete_diary_entry,
+    continue_diary_entry,
+    refine_custom_style_description,
     WRITER_STYLES,
     analyze_style_samples,
     evaluate_result,
@@ -74,10 +77,17 @@ def _init_session():
         "api_key_configured": False,
         "style_samples": "",
         "style_analysis": "",
+        "diary_notes": "",
+        "diary_date_hint": "",
+        "diary_scene_hint": "",
+        "diary_previous_entry": "",
+        "diary_continuous_mode": False,
         "selected_writers": [],
         "last_evaluation": "",
         "iteration_count": 0,
         "custom_styles": load_custom_styles(),
+        "custom_style_update_name": "",
+        "custom_style_update_samples": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -228,6 +238,51 @@ def _render_sidebar():
             else:
                 st.info("暂无自定义风格。在「风格样本学习」中分析后可保存自定义风格。")
 
+            st.markdown("---")
+            st.markdown("**♻️ 继续训练已有风格**")
+            available_custom_styles = list(st.session_state.get("custom_styles", {}).keys())
+            if available_custom_styles:
+                update_style_name = st.selectbox(
+                    "选择要继续训练的风格",
+                    options=available_custom_styles,
+                    index=0,
+                    key="custom_style_update_name",
+                )
+                update_samples = st.text_area(
+                    "输入新写的文字/新样本",
+                    value=st.session_state.get("custom_style_update_samples", ""),
+                    height=120,
+                    placeholder="粘贴你第二天新写的文字，AI 会在原有文风基础上继续训练……",
+                    key="custom_style_update_samples",
+                )
+                if st.button("🔁 用新样本继续训练", use_container_width=True):
+                    if not api_key_input.strip():
+                        st.error("请先在左侧设置 API Key")
+                    elif not update_samples.strip():
+                        st.error("请先输入新样本")
+                    else:
+                        current_desc = st.session_state.get("custom_styles", {}).get(update_style_name, "")
+                        with st.spinner("正在基于原有风格继续训练……"):
+                            try:
+                                updated_desc = refine_custom_style_description(
+                                    api_key=api_key_input.strip(),
+                                    api_base=api_base_input.strip() or None,
+                                    model=model_input.strip() or "gpt-3.5-turbo",
+                                    style_name=update_style_name,
+                                    current_description=current_desc,
+                                    new_samples=update_samples,
+                                )
+                                if save_custom_style(update_style_name, updated_desc):
+                                    st.session_state["custom_styles"] = load_custom_styles()
+                                    st.success(f"✅ 风格「{update_style_name}」已根据新样本更新")
+                                    st.rerun()
+                                else:
+                                    st.error("更新失败，请重试")
+                            except Exception as e:
+                                st.error(f"继续训练失败：{e}")
+            else:
+                st.caption("先保存一个自定义风格，再在这里继续训练它。")
+
     return {
         "api_key": api_key_input.strip(),
         "api_base": api_base_input.strip(),
@@ -367,18 +422,76 @@ def main():
     
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
+    task_mode = st.radio(
+        "功能模式",
+        options=["文风润色", "日记补全"],
+        index=0,
+        horizontal=True,
+    )
+
+    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+
     # 主内容区域
     col_left, col_mid, col_right = st.columns([2.5, 1.5, 2])
 
     with col_left:
         with st.container(border=True):
-            st.markdown("### 📝 输入原文")
-            input_text = st.text_area(
-                "在此粘贴或输入需要润色的文本",
-                height=240,
-                placeholder="在这里写下你的文字，让 AI 为它披上你钟爱作家的外衣……",
-                label_visibility="collapsed",
-            )
+            if task_mode == "日记补全":
+                st.markdown("### 📝 日记草稿")
+                st.caption("只要记下今天发生了什么、见了谁、去了哪里，AI 会帮你补成一篇完整日记。")
+
+                diary_mode = st.selectbox(
+                    "日记方式",
+                    options=["普通补全", "连续多天续写"],
+                    index=1 if st.session_state.get("diary_continuous_mode") else 0,
+                )
+                st.session_state["diary_continuous_mode"] = diary_mode == "连续多天续写"
+
+                if diary_mode == "连续多天续写":
+                    previous_entry = st.text_area(
+                        "前一天日记",
+                        value=st.session_state.get("diary_previous_entry", st.session_state.get("last_diary_result", "")),
+                        height=180,
+                        placeholder="粘贴前一天已经写好的日记，AI 会沿着这个内容继续写今天……",
+                        label_visibility="visible",
+                    )
+                    st.session_state["diary_previous_entry"] = previous_entry
+                else:
+                    previous_entry = ""
+                    st.session_state["diary_previous_entry"] = ""
+
+                input_text = st.text_area(
+                    "在此输入日记要点",
+                    value=st.session_state.get("diary_notes", ""),
+                    height=240,
+                    placeholder="例如：今天早上加班到很晚，午饭吃了面，晚上和朋友聊了会儿天，心情有点累但也算充实。",
+                    label_visibility="collapsed",
+                )
+                st.session_state["diary_notes"] = input_text
+
+                col_date, col_scene = st.columns(2)
+                with col_date:
+                    diary_date_hint = st.text_input(
+                        "日期提示",
+                        value=st.session_state.get("diary_date_hint", ""),
+                        placeholder="例如：2026年5月17日 / 周六 / 雨天",
+                    )
+                with col_scene:
+                    diary_scene_hint = st.text_input(
+                        "场景提示",
+                        value=st.session_state.get("diary_scene_hint", ""),
+                        placeholder="例如：宿舍、地铁上、咖啡馆",
+                    )
+                st.session_state["diary_date_hint"] = diary_date_hint
+                st.session_state["diary_scene_hint"] = diary_scene_hint
+            else:
+                st.markdown("### 📝 输入原文")
+                input_text = st.text_area(
+                    "在此粘贴或输入需要润色的文本",
+                    height=240,
+                    placeholder="在这里写下你的文字，让 AI 为它披上你钟爱作家的外衣……",
+                    label_visibility="collapsed",
+                )
 
         st.markdown("")
         
@@ -452,9 +565,10 @@ def main():
     with col_mid:
         with st.container(border=True):
             st.markdown("### 🎯 选择模式")
+            mode_options = ["单一作家", "风格混合"] if task_mode == "文风润色" else ["单一作家"]
             mode = st.radio(
                 "选择模式",
-                options=["单一作家", "风格混合"],
+                options=mode_options,
                 index=0,
                 label_visibility="collapsed",
                 horizontal=True,
@@ -576,7 +690,8 @@ def main():
         else:
             target_style = ""
 
-        start = st.button("🚀 开始润色", type="primary", use_container_width=True)
+        start_label = "🚀 开始补全" if task_mode == "日记补全" else "🚀 开始润色"
+        start = st.button(start_label, type="primary", use_container_width=True)
 
     with col_right:
         with st.container(border=True):
@@ -602,7 +717,7 @@ def main():
         if not api_key:
             st.error("❌ 未提供 API Key。请在左侧设置中填写，或在环境变量 OPENAI_API_KEY 中设置。")
         elif not input_text.strip():
-            st.error("❌ 请输入要润色的文本后再开始。")
+            st.error("❌ 请输入内容后再开始。")
         elif mode == "风格混合" and len(st.session_state.get("selected_writers", [])) < 2:
             st.error("❌ 风格混合模式需要选择至少 2 位作家。")
         else:
@@ -615,26 +730,64 @@ def main():
                 if target_style in custom_styles:
                     additional_style_analysis = custom_styles[target_style]
                 
-                with st.spinner(f"正在以「{'混合风格' if style_blend else target_style}」重写中，请稍候……"):
-                    result_text = generate_style_transfer(
-                        api_key=api_key,
-                        text=input_text,
-                        target_style=target_style,
-                        temperature=settings["temperature"],
-                        style_intensity=settings["style_intensity"],
-                        target_word_count=settings["target_word_count"],
-                        output_mode=settings["output_mode"],
-                        api_base=settings["api_base"] or None,
-                        model=settings["model"] or "gpt-3.5-turbo",
-                        style_samples=st.session_state.get("style_samples"),
-                        style_analysis=st.session_state.get("style_analysis") or additional_style_analysis,
-                        style_blend=style_blend,
-                    )
+                if task_mode == "日记补全":
+                    diary_continuous_mode = st.session_state.get("diary_continuous_mode", False)
+                    with st.spinner(f"正在以「{'混合风格' if style_blend else target_style}」补全文字，请稍候……"):
+                        if diary_continuous_mode:
+                            result_text = continue_diary_entry(
+                                api_key=api_key,
+                                previous_entry=st.session_state.get("diary_previous_entry", ""),
+                                notes=input_text,
+                                target_style=target_style,
+                                temperature=settings["temperature"],
+                                api_base=settings["api_base"] or None,
+                                model=settings["model"] or "gpt-3.5-turbo",
+                                style_samples=st.session_state.get("style_samples"),
+                                style_analysis=st.session_state.get("style_analysis") or additional_style_analysis,
+                                style_blend=style_blend,
+                                date_hint=st.session_state.get("diary_date_hint", ""),
+                                scene_hint=st.session_state.get("diary_scene_hint", ""),
+                            )
+                        else:
+                            result_text = complete_diary_entry(
+                                api_key=api_key,
+                                notes=input_text,
+                                target_style=target_style,
+                                temperature=settings["temperature"],
+                                api_base=settings["api_base"] or None,
+                                model=settings["model"] or "gpt-3.5-turbo",
+                                style_samples=st.session_state.get("style_samples"),
+                                style_analysis=st.session_state.get("style_analysis") or additional_style_analysis,
+                                style_blend=style_blend,
+                                date_hint=st.session_state.get("diary_date_hint", ""),
+                                scene_hint=st.session_state.get("diary_scene_hint", ""),
+                            )
+                else:
+                    with st.spinner(f"正在以「{'混合风格' if style_blend else target_style}」重写中，请稍候……"):
+                        result_text = generate_style_transfer(
+                            api_key=api_key,
+                            text=input_text,
+                            target_style=target_style,
+                            temperature=settings["temperature"],
+                            style_intensity=settings["style_intensity"],
+                            target_word_count=settings["target_word_count"],
+                            output_mode=settings["output_mode"],
+                            api_base=settings["api_base"] or None,
+                            model=settings["model"] or "gpt-3.5-turbo",
+                            style_samples=st.session_state.get("style_samples"),
+                            style_analysis=st.session_state.get("style_analysis") or additional_style_analysis,
+                            style_blend=style_blend,
+                        )
 
                 # 显示结果
                 display_style = "混合风格" if style_blend else target_style
-                st.success(f"✅ 以「{display_style}」风格润色完成")
+                if task_mode == "日记补全":
+                    st.success(f"✅ 以「{display_style}」风格补全完成")
+                else:
+                    st.success(f"✅ 以「{display_style}」风格润色完成")
                 st.session_state["iteration_count"] = 0
+                if task_mode == "日记补全":
+                    st.session_state["last_diary_result"] = result_text
 
             except Exception as e:
                 st.error(f"❌ 生成失败：{e}")
@@ -642,7 +795,7 @@ def main():
     # 显示润色结果
     if result_text:
         with st.container(border=True):
-            st.markdown("### ✨ 润色结果")
+            st.markdown("### ✨ 补全结果" if task_mode == "日记补全" else "### ✨ 润色结果")
 
             col_result, col_actions = st.columns([4, 1])
             with col_result:
@@ -660,36 +813,42 @@ def main():
                 st.markdown("")
                 st.button("📋 复制结果", on_click=lambda: st.code(result_text, language=None), use_container_width=True)
 
-                # 评分迭代按钮
-                st.markdown("")
-                if st.button("🔍 评分并优化", type="secondary", use_container_width=True):
-                    with st.spinner("正在评估润色结果……"):
-                        try:
-                            style_blend = st.session_state.get("style_blend")
-                            evaluation = evaluate_result(
-                                api_key=settings["api_key"],
-                                api_base=settings["api_base"],
-                                model=settings["model"] or "gpt-3.5-turbo",
-                                original_text=input_text,
-                                rewritten_text=result_text,
-                                target_style=target_style,
-                                style_blend=style_blend,
-                            )
-                            st.session_state["last_evaluation"] = evaluation
-                            st.success("评估完成！")
-                        except Exception as e:
-                            st.error(f"评估失败：{e}")
+                if task_mode != "日记补全":
+                    # 评分迭代按钮
+                    st.markdown("")
+                    if st.button("🔍 评分并优化", type="secondary", use_container_width=True):
+                        with st.spinner("正在评估润色结果……"):
+                            try:
+                                style_blend = st.session_state.get("style_blend")
+                                evaluation = evaluate_result(
+                                    api_key=settings["api_key"],
+                                    api_base=settings["api_base"],
+                                    model=settings["model"] or "gpt-3.5-turbo",
+                                    original_text=input_text,
+                                    rewritten_text=result_text,
+                                    target_style=target_style,
+                                    style_blend=style_blend,
+                                )
+                                st.session_state["last_evaluation"] = evaluation
+                                st.success("评估完成！")
+                            except Exception as e:
+                                st.error(f"评估失败：{e}")
+                else:
+                    st.markdown("")
+                    st.info("日记补全模式下已跳过评分优化，直接保留事实并补全表达即可。")
 
-            _add_to_history(input_text, display_style, result_text)
+            history_style = f"日记补全·{display_style}" if task_mode == "日记补全" else display_style
+            _add_to_history(input_text, history_style, result_text)
 
             with st.expander("📝 查看原文（对照）", expanded=False):
                 st.markdown(input_text)
 
-            # 显示风格对比
-            _render_style_comparison(input_text, result_text)
+            if task_mode != "日记补全":
+                # 显示风格对比
+                _render_style_comparison(input_text, result_text)
 
     # 显示评分和再润色
-    if st.session_state.get("last_evaluation"):
+    if task_mode != "日记补全" and st.session_state.get("last_evaluation"):
         st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
         with st.container(border=True):
             st.markdown("### 📊 润色评价")
