@@ -300,7 +300,6 @@ def main():
                 <div class="card">
                     <div class="card-title">📝 输入原文</div>
                     <div class="card-desc">把你想要润色的文字粘贴在这里</div>
-                </div>
                 """, unsafe_allow_html=True)
                 
                 input_text = st.text_area(
@@ -309,6 +308,8 @@ def main():
                     placeholder="在这里写下你的文字，让 AI 为它披上你钟爱作家的外衣……",
                     label_visibility="collapsed",
                 )
+                
+                st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
             
