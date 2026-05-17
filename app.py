@@ -39,104 +39,30 @@ def _init_session():
     st.session_state["custom_styles"] = custom_styles
 
 
-def apply_custom_css():
-    st.markdown("""
-    <style>
-    .main {
-        background-color: #f8fafc;
-    }
+def main():
+    st.set_page_config(
+        page_title="文风溯源",
+        page_icon="✍️",
+        layout="wide",
+    )
     
-    .stButton>button {
-        border-radius: 10px;
-        font-weight: 500;
-        transition: all 0.2s ease;
-        border: 1px solid #cbd5e1;
-    }
-    .stButton>button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    }
-    
-    h1, h2, h3 {
-        font-weight: 600 !important;
-    }
-    
-    .card {
-        background: white;
-        border-radius: 16px;
-        padding: 24px;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.08);
-        border: 3px solid #e2e8f0;
-        margin-bottom: 28px;
-        position: relative;
-    }
-    
-    .card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 4px;
-        background: linear-gradient(90deg, #667eea, #764ba2);
-        border-radius: 16px 16px 0 0;
-    }
-    
-    .card-title {
-        font-size: 18px;
-        font-weight: 700;
-        margin-bottom: 16px;
-        padding-bottom: 12px;
-        border-bottom: 3px solid #f1f5f9;
-        color: #1e293b;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-    
-    .card-desc {
-        color: #64748b;
-        font-size: 14px;
-        margin-bottom: 20px;
-        line-height: 1.6;
-    }
-    
-    .sidebar-logo {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 24px;
-        border-radius: 16px;
-        text-align: center;
-        margin-bottom: 24px;
-        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
-        border: 2px solid rgba(255,255,255,0.2);
-    }
-    
-    .section-divider {
-        height: 24px;
-        background: transparent;
-        margin: 8px 0;
-    }
-    
-    .tab-content {
-        padding: 20px 0;
-    }
-    
-    [data-testid="stVerticalBlock"] > [style*="flex-direction: column"] > [data-testid="stVerticalBlock"] {
-        gap: 28px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    _init_session()
+    settings = _render_sidebar()
+
+    tab1, tab2 = st.tabs(["🎭 风格润色", "✨ 我的写作风格"])
+
+    with tab1:
+        _render_style_transfer_tab(settings)
+
+    with tab2:
+        _render_user_style_tab(settings)
+
+    _render_history()
 
 
 def _render_sidebar():
     with st.sidebar:
-        st.markdown("""
-        <div class="sidebar-logo">
-            <h2 style="font-size: 22px; margin-bottom: 4px;">文风溯源</h2>
-            <p style="font-size: 13px; opacity: 0.9; margin: 0;">Literary Style Transfer</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.title("✍️ 文风溯源")
         
         env_api_key = os.environ.get("OPENAI_API_KEY", "")
         env_api_base = os.environ.get("OPENAI_BASE_URL", "")
@@ -145,76 +71,45 @@ def _render_sidebar():
         has_env_config = bool(env_api_key)
         
         if has_env_config:
-            st.success("✅ 已从 .env 文件加载配置")
+            st.success("✅ 已从 .env 加载")
         
         with st.expander("⚙️ API 配置", expanded=not has_env_config):
             if not has_env_config:
-                st.info("💡 提示：创建 .env 文件可以免去每次输入配置的麻烦！")
-                
-                with st.expander("📋 快速复制 .env 模板", expanded=False):
-                    st.code("""OPENAI_API_KEY=sk-你的API密钥
+                st.info("💡 创建 .env 文件可免去每次输入")
+                with st.expander("📋 .env 模板", expanded=False):
+                    st.code("""OPENAI_API_KEY=sk-xxx
 OPENAI_BASE_URL=https://api.deepseek.com
-OPENAI_MODEL=deepseek-chat
-""", language="bash")
-                    st.caption("在项目根目录创建文件名为 .env，填入以上内容并修改为你的配置")
+OPENAI_MODEL=deepseek-chat""", language="bash")
             
             api_key_input = st.text_input(
-                "API Key",
-                value=env_api_key,
-                type="password",
-                placeholder="sk-...",
-                help="若已配置 .env 文件，此处将自动填充",
-                disabled=has_env_config,
+                "API Key", value=env_api_key, type="password",
+                placeholder="sk-...", disabled=has_env_config,
             )
-
             api_base_input = st.text_input(
-                "API 地址",
-                value=env_api_base,
+                "API 地址", value=env_api_base,
                 placeholder="https://api.deepseek.com",
                 disabled=has_env_config,
             )
-
             model_input = st.text_input(
-                "模型名称",
-                value=env_model,
+                "模型", value=env_model,
                 placeholder="deepseek-chat",
                 disabled=has_env_config,
             )
 
         with st.expander("🎛️ 创作参数", expanded=False):
-            temperature = st.slider(
-                "创造性",
-                min_value=0.0,
-                max_value=1.0,
-                value=0.8,
-                step=0.05,
-                help="越高越有创造性，越低越稳定保守",
-            )
-
+            temperature = st.slider("创造性", 0.0, 1.0, 0.8, 0.05)
             style_intensity = st.select_slider(
                 "风格化强度",
                 options=["轻度", "适中", "重度"],
                 value="适中",
-                help="轻度=保留原文结构，仅融入语感；适中=全面改写；重度=创作级重写",
             )
 
         with st.expander("📝 输出控制", expanded=False):
-            enable_word_limit = st.checkbox("限制字数", value=False)
+            enable_word_limit = st.checkbox("限制字数")
             target_word_count = None
             if enable_word_limit:
-                target_word_count = st.number_input(
-                    "目标字数",
-                    min_value=50,
-                    max_value=5000,
-                    value=500,
-                    step=50,
-                )
-
-            output_mode = st.selectbox(
-                "输出模式",
-                options=["纯文本", "逐段对照", "润色+解析"],
-                index=0,
-            )
+                target_word_count = st.number_input("目标字数", 50, 5000, 500, 50)
+            output_mode = st.selectbox("输出模式", ["纯文本", "逐段对照", "润色+解析"])
 
         st.markdown("---")
         st.caption("预设作家：江南 | 村上春树 | 三毛 | 余秋雨 | 毛姆 | 张爱玲 | 鲁迅 | 海明威")
@@ -230,628 +125,329 @@ OPENAI_MODEL=deepseek-chat
     }
 
 
-def _render_writer_card(writer_name: str):
-    desc = WRITER_STYLES.get(writer_name, "")
-    if not desc:
+def _render_style_transfer_tab(settings):
+    col_left, col_mid, col_right = st.columns([2.5, 1.5, 2])
+
+    with col_left:
+        st.subheader("📝 输入原文")
+        input_text = st.text_area(
+            "在这里写下你的文字，让 AI 为它披上你钟爱作家的外衣……",
+            height=160,
+            label_visibility="collapsed",
+        )
+        st.session_state["input_text"] = input_text
+
+        st.divider()
+
+        st.subheader("📚 风格样本学习")
+        style_samples = st.text_area(
+            "粘贴《龙族》《挪威的森林》等你喜欢的作家作品片段……",
+            height=90,
+            label_visibility="collapsed",
+        )
+        st.session_state["style_samples"] = style_samples
+
+        col_analyze, col_clear = st.columns(2)
+        with col_analyze:
+            if st.button("🔍 分析样本风格", type="primary", use_container_width=True):
+                if not settings["api_key"]:
+                    st.error("请先在左侧设置 API Key")
+                elif not style_samples.strip():
+                    st.error("请先输入风格样本")
+                else:
+                    with st.spinner("正在分析样本风格……"):
+                        try:
+                            analysis = analyze_style_samples(
+                                api_key=settings["api_key"],
+                                api_base=settings["api_base"],
+                                model=settings["model"] or "gpt-3.5-turbo",
+                                samples=style_samples,
+                            )
+                            st.session_state["style_analysis"] = analysis
+                            st.success("✅ 风格分析完成！")
+                        except Exception as e:
+                            st.error(f"分析失败：{e}")
+        with col_clear:
+            if st.button("🗑️ 清空", use_container_width=True):
+                st.session_state["style_samples"] = ""
+                st.session_state["style_analysis"] = ""
+                st.rerun()
+
+        st.divider()
+
+        st.subheader("💾 保存为自定义风格")
+        st.caption("将分析结果或手动输入的风格描述保存，方便以后使用")
+        
+        if st.session_state.get("style_analysis"):
+            st.success("已分析的风格：" + st.session_state["style_analysis"][:100] + "...")
+        
+        style_source = st.radio(
+            "选择风格描述来源",
+            ["使用AI分析结果", "手动输入风格描述"],
+            horizontal=True,
+        )
+        
+        style_description = ""
+        if style_source == "使用AI分析结果":
+            if st.session_state.get("style_analysis"):
+                style_description = st.session_state["style_analysis"]
+                st.caption("✅ 将使用上方AI分析出的风格特征")
+            else:
+                st.warning("⚠️ 还没有分析结果，请先分析或切换到手动输入")
+        else:
+            style_description = st.text_area(
+                "✍️ 手动描述风格特征",
+                height=80,
+                placeholder="描述你想要的风格，例如：文风华丽细腻，擅长用繁复的比喻……",
+            )
+        
+        st.divider()
+        
+        col_name, col_btn = st.columns([3, 1])
+        with col_name:
+            custom_style_name = st.text_input(
+                "🎨 给风格起个名字",
+                placeholder="例如：金庸风格、我的文风……",
+            )
+        with col_btn:
+            st.markdown("")
+            if st.button("💾 保存", type="primary", use_container_width=True):
+                if not custom_style_name.strip():
+                    st.error("请输入风格名称！")
+                elif not style_description.strip():
+                    st.error("风格描述为空！")
+                else:
+                    if save_custom_style(custom_style_name.strip(), style_description):
+                        st.success(f"🎉 成功保存「{custom_style_name}」！")
+                        st.session_state["custom_styles"] = get_custom_styles()
+                        st.balloons()
+                        st.rerun()
+                    else:
+                        st.error("保存失败！")
+
+    with col_mid:
+        st.subheader("🎯 选择模式")
+        mode = st.radio("", ["单一作家", "风格混合"], horizontal=True, label_visibility="collapsed")
+        
+        st.divider()
+        
+        custom_styles = st.session_state.get("custom_styles", {})
+        all_writers = PRESET_WRITERS + list(custom_styles.keys())
+        
+        if mode == "单一作家":
+            st.subheader("✍️ 选择作家")
+            
+            if custom_styles:
+                st.markdown("**⭐ 我的自定义风格**")
+                for style_name in custom_styles.keys():
+                    selected = st.session_state.get("selected_writer", "")
+                    btn_type = "primary" if selected == style_name else "secondary"
+                    if st.button(f"⭐ {style_name}", key=f"custom_{style_name}", use_container_width=True, type=btn_type):
+                        st.session_state["selected_writer"] = style_name
+                
+                with st.expander("🗑️ 管理自定义风格"):
+                    for style_name in list(custom_styles.keys()):
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            st.text(f"📝 {style_name}")
+                        with col2:
+                            if st.button("删除", key=f"del_{style_name}"):
+                                delete_custom_style(style_name)
+                                st.session_state["custom_styles"] = get_custom_styles()
+                                st.rerun()
+                
+                st.markdown("**📚 预设作家风格**")
+            
+            for writer in PRESET_WRITERS:
+                selected = st.session_state.get("selected_writer", "")
+                btn_type = "primary" if selected == writer else "secondary"
+                if st.button(writer, key=f"writer_{writer}", use_container_width=True, type=btn_type):
+                    st.session_state["selected_writer"] = writer
+            
+            st.markdown("*或输入自定义：*")
+            custom_style_input = st.text_input("自定义风格", placeholder="例如：苏轼、古龙……", label_visibility="collapsed")
+        else:
+            st.subheader("🎨 风格混合")
+            selected_writers = st.multiselect("选择作家", options=all_writers, max_selections=4)
+            st.session_state["selected_writers"] = selected_writers
+            custom_style_input = ""
+            
+            if selected_writers:
+                weights = {}
+                for writer in selected_writers:
+                    weights[writer] = st.slider(f"{writer} 的比例", 10, 100, 50, 5) / 100.0
+                total = sum(weights.values())
+                if total > 0:
+                    weights = {w: v/total for w, v in weights.items()}
+                st.session_state["style_blend"] = weights
+            else:
+                st.session_state["style_blend"] = None
+
+        st.divider()
+        
+        if mode == "单一作家":
+            selected_writer = st.session_state.get("selected_writer", "")
+            target_style = custom_style_input.strip() or selected_writer or PRESET_WRITERS[0]
+        else:
+            target_style = ""
+        
+        if st.button("🚀 开始润色", type="primary", use_container_width=True):
+            _handle_style_transfer(settings, mode, target_style)
+
+    with col_right:
+        st.subheader("📖 预览与参考")
+        custom_styles = st.session_state.get("custom_styles", {})
+        
+        if mode == "单一作家" and target_style:
+            if target_style in WRITER_STYLES:
+                _render_writer_info(target_style)
+            elif target_style in custom_styles:
+                st.info(custom_styles[target_style])
+        elif mode == "风格混合" and st.session_state.get("selected_writers"):
+            blend_names = []
+            for w in st.session_state["selected_writers"]:
+                blend_names.append("⭐" + w if w in custom_styles else w)
+            st.success(" + ".join(blend_names))
+            for w in st.session_state["selected_writers"]:
+                if w in WRITER_STYLES:
+                    _render_writer_info(w)
+
+    st.divider()
+    
+    if "result_text" in st.session_state and st.session_state["result_text"]:
+        st.subheader("✨ 润色结果")
+        display_style = st.session_state.get("display_style", "")
+        st.markdown(f"**风格：** {display_style}")
+        st.markdown(st.session_state["result_text"])
+        st.button("📋 复制结果", on_click=lambda: st.code(st.session_state["result_text"]))
+
+
+def _handle_style_transfer(settings, mode, target_style):
+    if not settings["api_key"]:
+        st.error("❌ 未提供 API Key")
         return
-    sentences = desc.split("。")
-    key_points = [s.strip() + "。" for s in sentences if s.strip()][:3]
-    summary = "".join(key_points)
-    with st.expander(f"📖 关于 {writer_name} 的风格", expanded=False):
-        st.info(summary)
+    if not st.session_state.get("input_text", "").strip():
+        st.error("❌ 请输入要润色的文本")
+        return
+    if mode == "风格混合" and len(st.session_state.get("selected_writers", [])) < 2:
+        st.error("❌ 风格混合需要至少2位作家")
+        return
+    
+    try:
+        style_blend = st.session_state.get("style_blend") if mode == "风格混合" else None
+        with st.spinner(f"正在以「{'混合风格' if style_blend else target_style}」重写中……"):
+            result_text = generate_style_transfer(
+                api_key=settings["api_key"],
+                text=st.session_state["input_text"],
+                target_style=target_style,
+                temperature=settings["temperature"],
+                style_intensity=settings["style_intensity"],
+                target_word_count=settings["target_word_count"],
+                output_mode=settings["output_mode"],
+                api_base=settings["api_base"] or None,
+                model=settings["model"] or "gpt-3.5-turbo",
+                style_samples=st.session_state.get("style_samples"),
+                style_analysis=st.session_state.get("style_analysis"),
+                style_blend=style_blend,
+            )
+        
+        st.session_state["result_text"] = result_text
+        st.session_state["display_style"] = "混合风格" if style_blend else target_style
+        st.success(f"✅ 以「{st.session_state['display_style']}」风格润色完成！")
+        st.rerun()
+    except Exception as e:
+        st.error(f"❌ 生成失败：{e}")
 
 
-def _add_to_history(input_text, style, result):
-    st.session_state["history"].insert(
-        0,
-        {
-            "input": input_text[:200] + ("..." if len(input_text) > 200 else ""),
-            "style": style,
-            "result": result,
-        },
-    )
-    if len(st.session_state["history"]) > 20:
-        st.session_state["history"] = st.session_state["history"][:20]
+def _render_writer_info(writer_name):
+    desc = WRITER_STYLES.get(writer_name, "")
+    if desc:
+        with st.expander(f"📖 关于 {writer_name}", expanded=False):
+            st.info(desc[:200])
+
+
+def _render_user_style_tab(settings):
+    st.subheader("🔍 分析我的写作风格")
+    st.caption("提供你写的文本，AI将分析你的个人写作风格特征")
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        user_texts = st.text_area(
+            "粘贴你写的2-5篇文本，用 --- 分隔",
+            height=180,
+            label_visibility="collapsed",
+        )
+    with col2:
+        st.markdown("")
+        st.markdown("")
+        if st.button("🔬 分析我的风格", type="primary", use_container_width=True):
+            if not settings["api_key"]:
+                st.error("请先在左侧设置 API Key")
+            elif not user_texts.strip():
+                st.error("请先输入你的文本")
+            else:
+                texts = [t.strip() for t in user_texts.split("---") if t.strip()]
+                with st.spinner("正在分析你的写作风格……"):
+                    try:
+                        analysis = analyze_user_style(
+                            api_key=settings["api_key"],
+                            api_base=settings["api_base"],
+                            model=settings["model"] or "gpt-3.5-turbo",
+                            user_texts=texts,
+                        )
+                        st.session_state["user_style_analysis"] = analysis
+                        st.success("✅ 风格分析完成！")
+                    except Exception as e:
+                        st.error(f"分析失败：{e}")
+
+    if st.session_state.get("user_style_analysis"):
+        st.divider()
+        st.subheader("📋 你的写作风格分析报告")
+        st.success(st.session_state["user_style_analysis"])
+        
+        st.divider()
+        st.subheader("✍️ 用你的风格写作")
+        
+        col_topic, col_genre = st.columns([3, 1])
+        with col_topic:
+            topic = st.text_input("写作主题", placeholder="例如：关于秋天的记忆……")
+        with col_genre:
+            genre = st.selectbox("体裁", ["散文", "随笔", "日记", "小说片段", "诗歌"])
+        
+        if st.button("📝 开始写作", type="primary", use_container_width=True):
+            if not settings["api_key"]:
+                st.error("请先在左侧设置 API Key")
+            elif not topic.strip():
+                st.error("请输入写作主题")
+            else:
+                with st.spinner("正在用你的风格写作……"):
+                    try:
+                        result = generate_in_user_style(
+                            api_key=settings["api_key"],
+                            api_base=settings["api_base"],
+                            model=settings["model"] or "gpt-3.5-turbo",
+                            user_style_analysis=st.session_state["user_style_analysis"],
+                            topic=topic,
+                            genre=genre,
+                        )
+                        st.success("✅ 写作完成！")
+                        st.markdown(f"### 📜 {genre}：{topic}")
+                        st.markdown(result)
+                        st.button("📋 复制全文", on_click=lambda: st.code(result))
+                    except Exception as e:
+                        st.error(f"写作失败：{e}")
 
 
 def _render_history():
     if not st.session_state.get("history"):
         return
-
-    st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
     
-    st.markdown("""
-    <div class="card">
-        <div class="card-title">📜 生成历史</div>
-    """, unsafe_allow_html=True)
-
+    st.divider()
+    st.subheader("📜 生成历史")
+    
     for i, item in enumerate(st.session_state["history"]):
         with st.expander(f"#{i + 1}  {item['style']}风格 — {item['input'][:60]}...", expanded=False):
             st.markdown(item["result"])
-            if st.button("📋 复制此结果", key=f"copy_{i}"):
-                st.code(item["result"], language=None)
-            st.markdown("---")
-
-
-def main():
-    st.set_page_config(
-        page_title="文风溯源",
-        page_icon="✍️",
-        layout="wide",
-    )
-    apply_custom_css()
-    _init_session()
-    settings = _render_sidebar()
-
-    tab1, tab2 = st.tabs(["🎭 风格润色", "✨ 我的写作风格"])
-
-    with tab1:
-        col_left, col_mid, col_right = st.columns([2.5, 1.5, 2])
-
-        with col_left:
-            # 输入原文卡片
-            st.markdown("""
-            <div class="card">
-                <div class="card-title">📝 输入原文</div>
-                <div class="card-desc">把你想要润色的文字粘贴在这里</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            input_text = st.text_area(
-                "",
-                height=160,
-                placeholder="在这里写下你的文字，让 AI 为它披上你钟爱作家的外衣……",
-                label_visibility="collapsed",
-            )
-
-            st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
-            
-            # 风格样本学习卡片
-            st.markdown("""
-            <div class="card">
-                <div class="card-title">📚 风格样本学习</div>
-                <div class="card-desc">粘贴目标作家的1-3篇文章片段，让AI学习其独特风格（可选）</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            style_samples = st.text_area(
-                "",
-                value=st.session_state.get("style_samples", ""),
-                height=90,
-                placeholder="粘贴《龙族》《挪威的森林》等你喜欢的作家作品片段……",
-                label_visibility="collapsed",
-            )
-            st.session_state["style_samples"] = style_samples
-
-            col_analyze, col_clear = st.columns([1, 1])
-            with col_analyze:
-                if st.button("🔍 分析样本风格", type="primary", use_container_width=True):
-                    if not settings["api_key"]:
-                        st.error("请先在左侧设置 API Key")
-                    elif not style_samples.strip():
-                        st.error("请先输入风格样本")
-                    else:
-                        with st.spinner("正在分析样本风格……"):
-                            try:
-                                analysis = analyze_style_samples(
-                                    api_key=settings["api_key"],
-                                    api_base=settings["api_base"],
-                                    model=settings["model"] or "gpt-3.5-turbo",
-                                    samples=style_samples,
-                                )
-                                st.session_state["style_analysis"] = analysis
-                                st.success("✅ 风格分析完成！请在下方命名并保存")
-                            except Exception as e:
-                                st.error(f"分析失败：{e}")
-            with col_clear:
-                if st.button("🗑️ 清空", use_container_width=True):
-                    st.session_state["style_samples"] = ""
-                    st.session_state["style_analysis"] = ""
-                    st.session_state["pending_style_name"] = ""
-                    st.rerun()
-
-            st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
-            
-            # 保存自定义风格卡片 - 始终可见！
-            st.markdown("""
-            <div class="card">
-                <div class="card-title">💾 保存为自定义风格</div>
-                <div class="card-desc">将分析结果或手动输入的风格描述保存，方便以后随时使用</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            if st.session_state.get("style_analysis"):
-                st.markdown("#### 📋 AI 分析结果")
-                st.info(st.session_state["style_analysis"])
-                st.markdown("---")
-            
-            style_desc_source = st.radio(
-                "风格描述来源",
-                options=["使用AI分析结果", "手动输入风格描述"],
-                index=0 if st.session_state.get("style_analysis") else 1,
-                horizontal=True,
-            )
-            
-            style_description = ""
-            if style_desc_source == "使用AI分析结果":
-                if st.session_state.get("style_analysis"):
-                    style_description = st.session_state["style_analysis"]
-                    st.caption("✅ 将使用上方AI分析出的风格特征")
-                else:
-                    st.warning("⚠️ 还没有分析结果，请先在上方「风格样本学习」中分析，或切换到「手动输入」")
-            else:
-                manual_desc = st.text_area(
-                    "✍️ 风格描述",
-                    value="",
-                    height=80,
-                    placeholder="描述你想要的风格特征，例如：文风华丽而细腻，擅长用繁复的比喻和排比营造画面感……",
-                )
-                style_description = manual_desc
-            
-            st.markdown("---")
-            
-            col_name, col_save = st.columns([3, 1])
-            with col_name:
-                custom_style_name = st.text_input(
-                    "🎨 给风格起个名字",
-                    value=st.session_state.get("pending_style_name", ""),
-                    placeholder="例如：我的文风、金庸风格、某作家风格……",
-                    help="保存后会出现在「我的自定义风格」区域，随时可以使用"
-                )
-                st.session_state["pending_style_name"] = custom_style_name
-            
-            with col_save:
-                st.markdown("")
-                if st.button("💾 保存风格", type="primary", use_container_width=True):
-                    if not custom_style_name.strip():
-                        st.error("请先输入风格名称！")
-                    elif not style_description.strip():
-                        st.error("风格描述为空！请先分析或手动输入")
-                    else:
-                        if save_custom_style(custom_style_name.strip(), style_description):
-                            st.success(f"🎉 成功保存「{custom_style_name}」！现在去右侧「我的自定义风格」使用吧")
-                            st.session_state["custom_styles"] = get_custom_styles()
-                            st.balloons()
-                            st.rerun()
-                        else:
-                            st.error("保存失败，请重试")
-
-        with col_mid:
-            # 模式选择卡片
-            st.markdown("""
-            <div class="card">
-                <div class="card-title">🎯 选择模式</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            mode = st.radio(
-                "",
-                options=["单一作家", "风格混合"],
-                index=0,
-                label_visibility="collapsed",
-                horizontal=True,
-            )
-
-            st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
-            
-            # 作家选择/风格混合卡片
-            st.markdown("""
-            <div class="card">
-            </div>
-            """, unsafe_allow_html=True)
-            
-            custom_styles = st.session_state.get("custom_styles", {})
-            all_writers = PRESET_WRITERS + list(custom_styles.keys())
-            
-            if mode == "单一作家":
-                st.markdown("### ✍️ 选择作家")
-                
-                if custom_styles:
-                    st.markdown("---")
-                    st.markdown("#### 🎨 我的自定义风格")
-                    
-                    custom_cols = st.columns(2)
-                    for idx, style_name in enumerate(custom_styles.keys()):
-                        col_idx = idx % 2
-                        with custom_cols[col_idx]:
-                            selected = st.session_state.get("selected_writer", "")
-                            is_active = selected == style_name
-                            if st.button(
-                                f"⭐ {style_name}",
-                                key=f"single_custom_{style_name}",
-                                use_container_width=True,
-                                type="primary" if is_active else "secondary",
-                            ):
-                                st.session_state["selected_writer"] = style_name
-                                st.session_state["selected_writers"] = []
-                    
-                    with st.expander("⚙️ 管理自定义风格", expanded=False):
-                        for style_name in list(custom_styles.keys()):
-                            col_del_name, col_del_btn = st.columns([3, 1])
-                            with col_del_name:
-                                st.text(f"📝 {style_name}")
-                            with col_del_btn:
-                                if st.button("删除", key=f"del_{style_name}"):
-                                    delete_custom_style(style_name)
-                                    st.session_state["custom_styles"] = get_custom_styles()
-                                    if st.session_state.get("selected_writer") == style_name:
-                                        st.session_state["selected_writer"] = ""
-                                    st.success(f"已删除「{style_name}」")
-                                    st.rerun()
-                    
-                    st.markdown("---")
-                    st.markdown("#### 📚 预设作家风格")
-                
-                writer_cols = st.columns(2)
-                for idx, writer in enumerate(PRESET_WRITERS):
-                    col_idx = idx % 2
-                    with writer_cols[col_idx]:
-                        selected = st.session_state.get("selected_writer", "")
-                        is_active = selected == writer
-                        if st.button(
-                            writer,
-                            key=f"single_writer_{writer}",
-                            use_container_width=True,
-                            type="primary" if is_active else "secondary",
-                        ):
-                            st.session_state["selected_writer"] = writer
-                            st.session_state["selected_writers"] = []
-
-                st.markdown("")
-                st.caption("或输入自定义风格：")
-                custom_style = st.text_input(
-                    "",
-                    placeholder="例如：苏轼、马尔克斯、古龙……",
-                    label_visibility="collapsed",
-                )
-            else:
-                st.markdown("### 🎨 风格混合")
-                st.caption("选择 2-4 位作家，并设置混合比例")
-                
-                selected_writers = st.multiselect(
-                    "选择作家",
-                    options=all_writers,
-                    default=st.session_state.get("selected_writers", [])[:4],
-                    max_selections=4,
-                )
-                st.session_state["selected_writers"] = selected_writers
-                custom_style = ""
-                
-                if selected_writers:
-                    weights = {}
-                    for writer in selected_writers:
-                        weight = st.slider(
-                            f"{writer} 的比例",
-                            min_value=10,
-                            max_value=100,
-                            value=50,
-                            step=5,
-                            key=f"weight_{writer}",
-                        )
-                        weights[writer] = weight / 100.0
-                    
-                    total = sum(weights.values())
-                    if total > 0:
-                        for writer in weights:
-                            weights[writer] = weights[writer] / total
-                    
-                    st.session_state["style_blend"] = weights
-                else:
-                    st.session_state["style_blend"] = None
-
-            st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
-            
-            if mode == "单一作家":
-                selected_writer = st.session_state.get("selected_writer", "")
-                if custom_style.strip():
-                    target_style = custom_style.strip()
-                elif selected_writer:
-                    target_style = selected_writer
-                else:
-                    target_style = PRESET_WRITERS[0]
-            else:
-                target_style = ""
-
-            start = st.button("🚀 开始润色", type="primary", use_container_width=True)
-
-        with col_right:
-            # 作家预览卡片
-            st.markdown("""
-            <div class="card">
-                <div class="card-title">📖 预览与参考</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            custom_styles = st.session_state.get("custom_styles", {})
-            
-            if mode == "单一作家":
-                st.markdown("#### 作家风格介绍")
-                if target_style in WRITER_STYLES:
-                    _render_writer_card(target_style)
-                elif target_style in custom_styles:
-                    with st.expander(f"📝 自定义风格「{target_style}」", expanded=True):
-                        st.info(custom_styles[target_style])
-            elif st.session_state.get("selected_writers"):
-                st.markdown("#### 风格混合预览")
-                blend_desc = []
-                for writer in st.session_state["selected_writers"]:
-                    if writer in custom_styles:
-                        blend_desc.append(f"⭐{writer}")
-                    else:
-                        blend_desc.append(writer)
-                st.success(" + ".join(blend_desc))
-                
-                for writer in st.session_state["selected_writers"]:
-                    if writer in WRITER_STYLES:
-                        _render_writer_card(writer)
-                    else:
-                        with st.expander(f"📝 {writer}", expanded=False):
-                            st.info(custom_styles.get(writer, ""))
-
-        st.markdown("---")
-
-        result_text = ""
-        if start:
-            api_key = settings["api_key"]
-            if not api_key:
-                st.error("❌ 未提供 API Key。请在左侧设置中填写，或在环境变量 OPENAI_API_KEY 中设置。")
-            elif not input_text.strip():
-                st.error("❌ 请输入要润色的文本后再开始。")
-            elif mode == "风格混合" and len(st.session_state.get("selected_writers", [])) < 2:
-                st.error("❌ 风格混合模式需要选择至少 2 位作家。")
-            else:
-                try:
-                    style_blend = st.session_state.get("style_blend") if mode == "风格混合" else None
-                    
-                    with st.spinner(f"正在以「{'混合风格' if style_blend else target_style}」重写中……"):
-                        result_text = generate_style_transfer(
-                            api_key=api_key,
-                            text=input_text,
-                            target_style=target_style,
-                            temperature=settings["temperature"],
-                            style_intensity=settings["style_intensity"],
-                            target_word_count=settings["target_word_count"],
-                            output_mode=settings["output_mode"],
-                            api_base=settings["api_base"] or None,
-                            model=settings["model"] or "gpt-3.5-turbo",
-                            style_samples=st.session_state.get("style_samples"),
-                            style_analysis=st.session_state.get("style_analysis"),
-                            style_blend=style_blend,
-                        )
-
-                    display_style = "混合风格" if style_blend else target_style
-                    st.success(f"✅ 以「{display_style}」风格润色完成")
-                    st.session_state["iteration_count"] = 0
-
-                except Exception as e:
-                    st.error(f"❌ 生成失败：{e}")
-
-        st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
-        
-        if result_text:
-            st.markdown("""
-            <div class="card">
-                <div class="card-title">✨ 润色结果</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            col_result, col_actions = st.columns([4, 1])
-            with col_result:
-                st.markdown(result_text)
-            with col_actions:
-                display_style = "混合风格" if st.session_state.get("style_blend") else target_style
-                st.caption(f"**风格：** {display_style}")
-                st.caption(f"**强度：** {settings['style_intensity']}")
-                if settings["target_word_count"]:
-                    st.caption(f"**目标字数：** {settings['target_word_count']}")
-                
-                st.markdown("")
-                st.button("📋 复制结果", on_click=lambda: st.code(result_text, language=None), use_container_width=True)
-
-                st.markdown("")
-                if st.button("🔍 评分并优化", type="secondary", use_container_width=True):
-                    with st.spinner("正在评估润色结果……"):
-                        try:
-                            style_blend = st.session_state.get("style_blend")
-                            evaluation = evaluate_result(
-                                api_key=settings["api_key"],
-                                api_base=settings["api_base"],
-                                model=settings["model"] or "gpt-3.5-turbo",
-                                original_text=input_text,
-                                rewritten_text=result_text,
-                                target_style=target_style,
-                                style_blend=style_blend,
-                            )
-                            st.session_state["last_evaluation"] = evaluation
-                            st.success("评估完成！")
-                        except Exception as e:
-                            st.error(f"评估失败：{e}")
-
-            _add_to_history(input_text, display_style, result_text)
-
-            with st.expander("📝 查看原文（对照）", expanded=False):
-                st.markdown(input_text)
-
-        st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
-        
-        if st.session_state.get("last_evaluation"):
-            st.markdown("""
-            <div class="card">
-                <div class="card-title">📊 润色评价</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            st.info(st.session_state["last_evaluation"])
-            
-            col_retry, col_clear = st.columns([1, 1])
-            with col_retry:
-                if st.button("🔄 根据建议再润色", type="primary", use_container_width=True):
-                    with st.spinner("正在根据反馈优化润色……"):
-                        try:
-                            style_blend = st.session_state.get("style_blend")
-                            result_text = generate_style_transfer(
-                                api_key=settings["api_key"],
-                                text=input_text,
-                                target_style=target_style,
-                                temperature=settings["temperature"],
-                                style_intensity=settings["style_intensity"],
-                                target_word_count=settings["target_word_count"],
-                                output_mode=settings["output_mode"],
-                                api_base=settings["api_base"] or None,
-                                model=settings["model"] or "gpt-3.5-turbo",
-                                style_samples=st.session_state.get("style_samples"),
-                                style_analysis=st.session_state.get("style_analysis"),
-                                style_blend=style_blend,
-                                evaluation_feedback=st.session_state["last_evaluation"],
-                            )
-                            st.session_state["iteration_count"] += 1
-                            st.success(f"再润色完成！（迭代次数：{st.session_state['iteration_count']}）")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"再润色失败：{e}")
-            with col_clear:
-                if st.button("🗑️ 清除评价", use_container_width=True):
-                    st.session_state["last_evaluation"] = ""
-                    st.rerun()
-
-    with tab2:
-        # 风格分析卡片
-        st.markdown("""
-        <div class="card">
-            <div class="card-title">🔍 分析我的写作风格</div>
-            <div class="card-desc">提供你写的 2-5 篇文本，AI 将分析你的个人写作风格特征</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        col_sample1, col_sample2 = st.columns([3, 1])
-        
-        with col_sample1:
-            user_texts_input = st.text_area(
-                "",
-                value=st.session_state.get("user_texts_input", ""),
-                height=180,
-                placeholder="粘贴你写的2-5篇文本，用 --- 分隔不同文章……",
-                label_visibility="collapsed",
-            )
-            st.session_state["user_texts_input"] = user_texts_input
-            
-        with col_sample2:
-            st.markdown("")
-            st.markdown("")
-            if st.button("🔬 分析我的风格", type="primary", use_container_width=True):
-                if not settings["api_key"]:
-                    st.error("请先在左侧设置 API Key")
-                elif not user_texts_input.strip():
-                    st.error("请先输入你的文本")
-                else:
-                    texts = [t.strip() for t in user_texts_input.split("---") if t.strip()]
-                    if len(texts) < 1:
-                        st.error("请至少提供一篇文本")
-                    else:
-                        with st.spinner("正在分析你的写作风格……"):
-                            try:
-                                analysis = analyze_user_style(
-                                    api_key=settings["api_key"],
-                                    api_base=settings["api_base"],
-                                    model=settings["model"] or "gpt-3.5-turbo",
-                                    user_texts=texts,
-                                )
-                                st.session_state["user_style_analysis"] = analysis
-                                st.success("✅ 风格分析完成！")
-                            except Exception as e:
-                                st.error(f"分析失败：{e}")
-
-        st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
-        
-        if st.session_state.get("user_style_analysis"):
-            # 风格分析结果卡片
-            st.markdown("""
-            <div class="card">
-                <div class="card-title">📋 你的写作风格分析报告</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            st.success(st.session_state["user_style_analysis"])
-
-            st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
-            
-            # 用我的风格写作卡片
-            st.markdown("""
-            <div class="card">
-                <div class="card-title">✍️ 用你的风格写作</div>
-                <div class="card-desc">基于分析出的风格特征，帮你撰写符合你个人风格的文章</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            col_topic, col_genre = st.columns([3, 1])
-            
-            with col_topic:
-                topic = st.text_input(
-                    "",
-                    placeholder="例如：关于秋天的记忆、一次难忘的旅行……",
-                    label_visibility="collapsed",
-                )
-            
-            with col_genre:
-                genre = st.selectbox(
-                    "文章体裁",
-                    options=["散文", "随笔", "日记", "小说片段", "诗歌"],
-                    index=0,
-                )
-
-            writing_temperature = st.slider(
-                "创造性",
-                min_value=0.0,
-                max_value=1.0,
-                value=0.7,
-                step=0.05,
-                help="控制写作的创造性程度",
-            )
-
-            enable_write_limit = st.checkbox("限制字数", value=False)
-            write_word_count = None
-            if enable_write_limit:
-                write_word_count = st.number_input(
-                    "目标字数",
-                    min_value=100,
-                    max_value=3000,
-                    value=800,
-                    step=100,
-                )
-
-            if st.button("📝 开始写作", type="primary", use_container_width=True):
-                if not settings["api_key"]:
-                    st.error("请先在左侧设置 API Key")
-                elif not topic.strip():
-                    st.error("请输入写作主题")
-                else:
-                    with st.spinner("正在用你的风格写作……"):
-                        try:
-                            written_result = generate_in_user_style(
-                                api_key=settings["api_key"],
-                                api_base=settings["api_base"],
-                                model=settings["model"] or "gpt-3.5-turbo",
-                                user_style_analysis=st.session_state["user_style_analysis"],
-                                topic=topic,
-                                genre=genre,
-                                target_word_count=write_word_count,
-                                temperature=writing_temperature,
-                            )
-                            
-                            st.success("✅ 写作完成！")
-                            
-                            # 写作结果显示
-                            st.markdown(f"### 📜 {genre}：{topic}")
-                            st.markdown(written_result)
-                            
-                            _add_to_history(f"【写作】{topic}", "个人风格", written_result)
-                            
-                            st.button("📋 复制全文", on_click=lambda: st.code(written_result, language=None), use_container_width=True)
-                            
-                        except Exception as e:
-                            st.error(f"写作失败：{e}")
-
-    _render_history()
 
 
 if __name__ == "__main__":
