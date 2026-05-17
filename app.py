@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -16,6 +17,8 @@ from llm_service import (
 
 
 load_dotenv()
+
+ENV_FILE = Path(__file__).resolve().parent / ".env"
 
 PRESET_WRITERS = list(WRITER_STYLES.keys())
 
@@ -81,6 +84,33 @@ def _init_session():
             st.session_state[key] = value
 
 
+def _save_api_key_to_env(api_key: str) -> bool:
+    """将 API Key 持久化到项目根目录的 .env 文件。"""
+    api_key = api_key.strip()
+    if not api_key:
+        return False
+
+    existing_lines = []
+    if ENV_FILE.exists():
+        existing_lines = ENV_FILE.read_text(encoding="utf-8").splitlines()
+
+    updated_lines = []
+    replaced = False
+    for line in existing_lines:
+        if line.startswith("OPENAI_API_KEY="):
+            updated_lines.append(f"OPENAI_API_KEY={api_key}")
+            replaced = True
+        else:
+            updated_lines.append(line)
+
+    if not replaced:
+        updated_lines.append(f"OPENAI_API_KEY={api_key}")
+
+    ENV_FILE.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
+    os.environ["OPENAI_API_KEY"] = api_key
+    return True
+
+
 def _render_sidebar():
     with st.sidebar:
         st.markdown("## ⚙️ 配置")
@@ -94,6 +124,30 @@ def _render_sidebar():
                 placeholder="sk-...",
                 help="若不设置环境变量，请在此填入 API Key",
             )
+
+            col_save_key, col_clear_key = st.columns([1, 1])
+            with col_save_key:
+                if st.button("💾 保存到本机", use_container_width=True):
+                    if api_key_input.strip():
+                        if _save_api_key_to_env(api_key_input):
+                            st.success("已保存到本地 .env，之后重新打开也会自动生效")
+                            st.rerun()
+                    else:
+                        st.error("请先输入 API Key")
+            with col_clear_key:
+                if st.button("🧹 清除本机保存", use_container_width=True):
+                    if ENV_FILE.exists():
+                        lines = ENV_FILE.read_text(encoding="utf-8").splitlines()
+                        kept_lines = [line for line in lines if not line.startswith("OPENAI_API_KEY=")]
+                        ENV_FILE.write_text("\n".join(kept_lines) + ("\n" if kept_lines else ""), encoding="utf-8")
+                    os.environ.pop("OPENAI_API_KEY", None)
+                    st.session_state["api_key_configured"] = False
+                    st.rerun()
+
+            if env_api_key:
+                st.caption("当前已检测到本地保存的 API Key，打开应用后会自动填入。")
+            else:
+                st.caption("提示：点击「保存到本机」后，API Key 会写入项目根目录的 .env 文件。")
 
             env_api_base = os.environ.get("OPENAI_BASE_URL", "")
             api_base_input = st.text_input(
