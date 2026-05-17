@@ -3,6 +3,78 @@ llm_service.py
 封装与 LLM API 交互的函数，支持风格样本学习、精细参数控制、评分迭代和风格混合。
 """
 from typing import Optional, Dict, Any
+import json
+import os
+from pathlib import Path
+
+
+# 自定义风格存储路径
+CUSTOM_STYLES_FILE = Path.home() / ".moonpence" / "custom_styles.json"
+
+
+def _ensure_custom_styles_dir():
+    """确保自定义风格目录存在"""
+    CUSTOM_STYLES_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+
+def load_custom_styles() -> Dict[str, str]:
+    """
+    从本地文件加载自定义风格。
+    返回字典：{风格名称: 风格描述}
+    """
+    _ensure_custom_styles_dir()
+    if CUSTOM_STYLES_FILE.exists():
+        try:
+            with open(CUSTOM_STYLES_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def save_custom_style(style_name: str, style_description: str) -> bool:
+    """
+    保存一个自定义风格。
+    返回是否成功。
+    """
+    _ensure_custom_styles_dir()
+    try:
+        custom_styles = load_custom_styles()
+        custom_styles[style_name] = style_description
+        with open(CUSTOM_STYLES_FILE, 'w', encoding='utf-8') as f:
+            json.dump(custom_styles, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception:
+        return False
+
+
+def delete_custom_style(style_name: str) -> bool:
+    """
+    删除一个自定义风格。
+    返回是否成功。
+    """
+    try:
+        custom_styles = load_custom_styles()
+        if style_name in custom_styles:
+            del custom_styles[style_name]
+            _ensure_custom_styles_dir()
+            with open(CUSTOM_STYLES_FILE, 'w', encoding='utf-8') as f:
+                json.dump(custom_styles, f, ensure_ascii=False, indent=2)
+            return True
+        return False
+    except Exception:
+        return False
+
+
+def get_all_styles() -> Dict[str, str]:
+    """
+    获取所有风格（预设 + 自定义）。
+    返回合并后的字典。
+    """
+    all_styles = WRITER_STYLES.copy()
+    custom_styles = load_custom_styles()
+    all_styles.update(custom_styles)
+    return all_styles
 
 
 WRITER_STYLES = {

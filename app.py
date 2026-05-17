@@ -8,6 +8,10 @@ from llm_service import (
     analyze_style_samples,
     evaluate_result,
     compute_style_features,
+    load_custom_styles,
+    save_custom_style,
+    delete_custom_style,
+    get_all_styles,
 )
 
 
@@ -70,6 +74,7 @@ def _init_session():
         "selected_writers": [],
         "last_evaluation": "",
         "iteration_count": 0,
+        "custom_styles": load_custom_styles(),
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -151,6 +156,24 @@ def _render_sidebar():
             "预设作家：江南 | 村上春树 | 三毛 | 余秋雨 | 毛姆 | 张爱玲 | 鲁迅 | 海明威"
         )
 
+        st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+        
+        with st.expander("⭐ 自定义风格管理", expanded=False):
+            custom_styles = st.session_state.get("custom_styles", {})
+            if custom_styles:
+                st.markdown("**已保存的自定义风格：**")
+                for style_name in custom_styles:
+                    col_style, col_del = st.columns([3, 1])
+                    with col_style:
+                        st.caption(f"• {style_name}")
+                    with col_del:
+                        if st.button("🗑️", key=f"del_style_{style_name}", help="删除此风格"):
+                            delete_custom_style(style_name)
+                            st.session_state["custom_styles"] = load_custom_styles()
+                            st.rerun()
+            else:
+                st.info("暂无自定义风格。在「风格样本学习」中分析后可保存自定义风格。")
+
     return {
         "api_key": api_key_input.strip(),
         "api_base": api_base_input.strip(),
@@ -163,13 +186,19 @@ def _render_sidebar():
 
 
 def _render_writer_card(writer_name: str):
-    desc = WRITER_STYLES.get(writer_name, "")
+    all_styles = get_all_styles()
+    desc = all_styles.get(writer_name, "")
     if not desc:
         return
     sentences = desc.split("。")
     key_points = [s.strip() + "。" for s in sentences if s.strip()][:3]
     summary = "".join(key_points)
-    with st.expander(f"📖 关于 {writer_name} 的风格", expanded=False):
+    
+    # 根据是否是自定义风格显示不同的标题
+    is_custom = writer_name in st.session_state.get("custom_styles", {})
+    title = f"✨ 关于「{writer_name}」的风格（自定义）" if is_custom else f"📖 关于 {writer_name} 的风格"
+    
+    with st.expander(title, expanded=False):
         st.info(summary)
 
 
@@ -340,6 +369,31 @@ def main():
             if st.session_state.get("style_analysis"):
                 with st.expander("📋 已分析的风格特征", expanded=False):
                     st.success(st.session_state["style_analysis"])
+                    
+                    st.markdown("---")
+                    st.markdown("**💾 保存为自定义风格**")
+                    col_name, col_save = st.columns([2, 1])
+                    with col_name:
+                        custom_name = st.text_input(
+                            "风格名称",
+                            placeholder="例如：我的创意文风、古文蕴意风……",
+                            label_visibility="collapsed",
+                            key="custom_style_name_input",
+                        )
+                    with col_save:
+                        if st.button("💾 保存风格", use_container_width=True):
+                            if not custom_name.strip():
+                                st.error("请输入风格名称")
+                            elif custom_name in WRITER_STYLES or custom_name in st.session_state.get("custom_styles", {}):
+                                st.error("风格名称已存在，请更换")
+                            else:
+                                if save_custom_style(custom_name, st.session_state["style_analysis"]):
+                                    st.session_state["custom_styles"] = load_custom_styles()
+                                    st.success(f"✅ 风格「{custom_name}」已保存！现在可在作家选择中使用。")
+                                    st.session_state["custom_style_name_input"] = ""
+                                    st.rerun()
+                                else:
+                                    st.error("保存失败，请重试")
 
     with col_mid:
         with st.container(border=True):
@@ -357,20 +411,47 @@ def main():
         with st.container(border=True):
             if mode == "单一作家":
                 st.markdown("### ✍️ 选择作家")
-                writer_cols = st.columns(2)
-                for idx, writer in enumerate(PRESET_WRITERS):
-                    col_idx = idx % 2
-                    with writer_cols[col_idx]:
-                        selected = st.session_state.get("selected_writer", "")
-                        is_active = selected == writer
-                        if st.button(
-                            writer,
-                            key=f"single_writer_{writer}",
-                            use_container_width=True,
-                            type="primary" if is_active else "secondary",
-                        ):
-                            st.session_state["selected_writer"] = writer
-                            st.session_state["selected_writers"] = []
+                
+                # 获取所有风格（预设 + 自定义）
+                all_styles = get_all_styles()
+                custom_styles = st.session_state.get("custom_styles", {})
+                preset_writers = list(WRITER_STYLES.keys())
+                
+                # 显示预设作家
+                if preset_writers:
+                    st.markdown("**🏆 预设作家：**")
+                    writer_cols = st.columns(2)
+                    for idx, writer in enumerate(preset_writers):
+                        col_idx = idx % 2
+                        with writer_cols[col_idx]:
+                            selected = st.session_state.get("selected_writer", "")
+                            is_active = selected == writer
+                            if st.button(
+                                writer,
+                                key=f"single_writer_{writer}",
+                                use_container_width=True,
+                                type="primary" if is_active else "secondary",
+                            ):
+                                st.session_state["selected_writer"] = writer
+                                st.session_state["selected_writers"] = []
+                
+                # 显示自定义风格
+                if custom_styles:
+                    st.markdown("**⭐ 自定义风格：**")
+                    custom_cols = st.columns(2)
+                    for idx, style_name in enumerate(custom_styles.keys()):
+                        col_idx = idx % 2
+                        with custom_cols[col_idx]:
+                            selected = st.session_state.get("selected_writer", "")
+                            is_active = selected == style_name
+                            if st.button(
+                                f"✨ {style_name}",
+                                key=f"custom_writer_{style_name}",
+                                use_container_width=True,
+                                type="primary" if is_active else "secondary",
+                            ):
+                                st.session_state["selected_writer"] = style_name
+                                st.session_state["selected_writers"] = []
 
                 st.markdown("")
                 st.caption("或输入自定义风格：")
@@ -383,10 +464,16 @@ def main():
                 st.markdown("### 🎨 风格混合")
                 st.caption("选择 2-4 位作家，并设置混合比例")
                 
+                # 获取所有风格（预设 + 自定义）
+                all_styles = get_all_styles()
+                custom_styles = st.session_state.get("custom_styles", {})
+                preset_writers = list(WRITER_STYLES.keys())
+                all_available_writers = preset_writers + list(custom_styles.keys())
+                
                 # 选择要混合的作家
                 selected_writers = st.multiselect(
                     "选择作家",
-                    options=PRESET_WRITERS,
+                    options=all_available_writers,
                     default=st.session_state.get("selected_writers", [])[:4],
                     max_selections=4,
                 )
@@ -439,9 +526,10 @@ def main():
 
     with col_right:
         with st.container(border=True):
+            all_styles = get_all_styles()
             if mode == "单一作家":
                 st.markdown("### 📖 作家预览")
-                if target_style in WRITER_STYLES:
+                if target_style in all_styles:
                     _render_writer_card(target_style)
             elif st.session_state.get("selected_writers"):
                 st.markdown("### 🎨 混合预览")
@@ -467,6 +555,12 @@ def main():
             try:
                 style_blend = st.session_state.get("style_blend") if mode == "风格混合" else None
                 
+                # 如果选择的是自定义风格，获取其描述
+                custom_styles = st.session_state.get("custom_styles", {})
+                additional_style_analysis = None
+                if target_style in custom_styles:
+                    additional_style_analysis = custom_styles[target_style]
+                
                 with st.spinner(f"正在以「{'混合风格' if style_blend else target_style}」重写中，请稍候……"):
                     result_text = generate_style_transfer(
                         api_key=api_key,
@@ -479,7 +573,7 @@ def main():
                         api_base=settings["api_base"] or None,
                         model=settings["model"] or "gpt-3.5-turbo",
                         style_samples=st.session_state.get("style_samples"),
-                        style_analysis=st.session_state.get("style_analysis"),
+                        style_analysis=st.session_state.get("style_analysis") or additional_style_analysis,
                         style_blend=style_blend,
                     )
 
@@ -553,6 +647,13 @@ def main():
                     with st.spinner("正在根据反馈优化润色……"):
                         try:
                             style_blend = st.session_state.get("style_blend")
+                            
+                            # 如果选择的是自定义风格，获取其描述
+                            custom_styles = st.session_state.get("custom_styles", {})
+                            additional_style_analysis = None
+                            if target_style in custom_styles:
+                                additional_style_analysis = custom_styles[target_style]
+                            
                             result_text = generate_style_transfer(
                                 api_key=settings["api_key"],
                                 text=input_text,
@@ -564,7 +665,7 @@ def main():
                                 api_base=settings["api_base"] or None,
                                 model=settings["model"] or "gpt-3.5-turbo",
                                 style_samples=st.session_state.get("style_samples"),
-                                style_analysis=st.session_state.get("style_analysis"),
+                                style_analysis=st.session_state.get("style_analysis") or additional_style_analysis,
                                 style_blend=style_blend,
                                 evaluation_feedback=st.session_state["last_evaluation"],
                             )
