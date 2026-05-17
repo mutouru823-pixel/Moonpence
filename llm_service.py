@@ -3,9 +3,67 @@ llm_service.py
 封装与 LLM API 交互的函数，支持多作家风格迁移与精细参数控制。
 """
 import os
-from typing import Optional
+import json
+from typing import Optional, Dict
+from pathlib import Path
 
 import openai
+
+
+CUSTOM_STYLES_FILE = Path.home() / ".style_transfer_custom_styles.json"
+
+
+def _load_custom_styles() -> Dict[str, str]:
+    """从本地文件加载自定义风格"""
+    if CUSTOM_STYLES_FILE.exists():
+        try:
+            with open(CUSTOM_STYLES_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def save_custom_style(name: str, description: str) -> bool:
+    """
+    保存自定义风格到本地文件
+    
+    参数：
+    - name: 风格名称
+    - description: 风格描述（分析结果）
+    
+    返回：是否保存成功
+    """
+    try:
+        styles = _load_custom_styles()
+        styles[name] = description
+        
+        CUSTOM_STYLES_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(CUSTOM_STYLES_FILE, 'w', encoding='utf-8') as f:
+            json.dump(styles, f, ensure_ascii=False, indent=2)
+        
+        return True
+    except Exception:
+        return False
+
+
+def get_custom_styles() -> Dict[str, str]:
+    """获取所有自定义风格"""
+    return _load_custom_styles()
+
+
+def delete_custom_style(name: str) -> bool:
+    """删除指定的自定义风格"""
+    try:
+        styles = _load_custom_styles()
+        if name in styles:
+            del styles[name]
+            with open(CUSTOM_STYLES_FILE, 'w', encoding='utf-8') as f:
+                json.dump(styles, f, ensure_ascii=False, indent=2)
+            return True
+        return False
+    except Exception:
+        return False
 
 
 WRITER_STYLES = {
@@ -71,6 +129,11 @@ SYSTEM_PROMPT_BASE = (
 def _build_system_prompt(target_style: str) -> str:
     """根据目标风格构建定制化的系统提示。"""
     style_desc = WRITER_STYLES.get(target_style)
+    
+    if not style_desc:
+        custom_styles = get_custom_styles()
+        style_desc = custom_styles.get(target_style)
+    
     if style_desc:
         return (
             f"{SYSTEM_PROMPT_BASE}\n\n"
