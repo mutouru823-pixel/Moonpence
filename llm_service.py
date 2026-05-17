@@ -6,15 +6,23 @@ from typing import Optional, Dict, Any
 import json
 import os
 from pathlib import Path
+from datetime import datetime
+from uuid import uuid4
 
 
 # 自定义风格存储路径
 CUSTOM_STYLES_FILE = Path.home() / ".moonpence" / "custom_styles.json"
+DIARY_LIBRARY_FILE = Path.home() / ".moonpence" / "diary_library.json"
 
 
 def _ensure_custom_styles_dir():
     """确保自定义风格目录存在"""
     CUSTOM_STYLES_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _ensure_diary_library_dir():
+    """确保日记库目录存在"""
+    DIARY_LIBRARY_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 
 def load_custom_styles() -> Dict[str, str]:
@@ -75,6 +83,81 @@ def get_all_styles() -> Dict[str, str]:
     custom_styles = load_custom_styles()
     all_styles.update(custom_styles)
     return all_styles
+
+
+def load_diary_library() -> list:
+    """
+    加载本地日记库。
+    返回按创建时间倒序排列的条目列表。
+    """
+    _ensure_diary_library_dir()
+    if DIARY_LIBRARY_FILE.exists():
+        try:
+            with open(DIARY_LIBRARY_FILE, 'r', encoding='utf-8') as f:
+                entries = json.load(f)
+                if isinstance(entries, list):
+                    return sorted(entries, key=lambda item: item.get("created_at", ""), reverse=True)
+        except Exception:
+            return []
+    return []
+
+
+def save_diary_entry(
+    title: str,
+    content: str,
+    notes: str = "",
+    style_name: str = "",
+    mode: str = "日记补全",
+    previous_entry: str = "",
+) -> str:
+    """
+    保存一篇日记到本地日记库。
+    返回保存后的条目 ID。
+    """
+    _ensure_diary_library_dir()
+    entry = {
+        "id": uuid4().hex,
+        "title": title.strip() or "未命名日记",
+        "content": content.strip(),
+        "notes": notes.strip(),
+        "style_name": style_name.strip(),
+        "mode": mode,
+        "previous_entry": previous_entry.strip(),
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+    }
+
+    entries = load_diary_library()
+    entries.insert(0, entry)
+    with open(DIARY_LIBRARY_FILE, 'w', encoding='utf-8') as f:
+        json.dump(entries, f, ensure_ascii=False, indent=2)
+    return entry["id"]
+
+
+def delete_diary_entry(entry_id: str) -> bool:
+    """
+    删除日记库中的某条记录。
+    """
+    try:
+        entries = load_diary_library()
+        filtered_entries = [entry for entry in entries if entry.get("id") != entry_id]
+        if len(filtered_entries) == len(entries):
+            return False
+        _ensure_diary_library_dir()
+        with open(DIARY_LIBRARY_FILE, 'w', encoding='utf-8') as f:
+            json.dump(filtered_entries, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception:
+        return False
+
+
+def get_diary_entry(entry_id: str) -> Dict[str, Any]:
+    """
+    通过 ID 获取单条日记。
+    """
+    for entry in load_diary_library():
+        if entry.get("id") == entry_id:
+            return entry
+    return {}
 
 
 WRITER_STYLES = {

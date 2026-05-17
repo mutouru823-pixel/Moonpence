@@ -16,6 +16,10 @@ from llm_service import (
     save_custom_style,
     delete_custom_style,
     get_all_styles,
+    load_diary_library,
+    save_diary_entry,
+    delete_diary_entry,
+    get_diary_entry,
 )
 
 
@@ -82,12 +86,15 @@ def _init_session():
         "diary_scene_hint": "",
         "diary_previous_entry": "",
         "diary_continuous_mode": False,
+        "diary_library": load_diary_library(),
+        "selected_diary_id": "",
         "selected_writers": [],
         "last_evaluation": "",
         "iteration_count": 0,
         "custom_styles": load_custom_styles(),
         "custom_style_update_name": "",
         "custom_style_update_samples": "",
+        "diary_save_title": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -282,6 +289,60 @@ def _render_sidebar():
                                 st.error(f"继续训练失败：{e}")
             else:
                 st.caption("先保存一个自定义风格，再在这里继续训练它。")
+
+        st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+
+        with st.expander("📓 日记库", expanded=False):
+            diary_library = st.session_state.get("diary_library", load_diary_library())
+            if diary_library:
+                diary_options = {
+                    f"{entry.get('created_at', '')} | {entry.get('title', '未命名日记')}": entry.get("id", "")
+                    for entry in diary_library
+                }
+                selected_label = st.selectbox(
+                    "选择一篇日记",
+                    options=list(diary_options.keys()),
+                    index=0,
+                    key="diary_library_selector",
+                )
+                selected_id = diary_options.get(selected_label, "")
+                st.session_state["selected_diary_id"] = selected_id
+
+                selected_entry = get_diary_entry(selected_id) if selected_id else {}
+                if selected_entry:
+                    st.caption(f"风格：{selected_entry.get('style_name') or '未标注'}")
+                    st.caption(f"模式：{selected_entry.get('mode')}")
+                    st.text_area(
+                        "内容预览",
+                        value=selected_entry.get("content", ""),
+                        height=120,
+                        disabled=True,
+                        label_visibility="collapsed",
+                    )
+
+                    col_load_prev, col_load_notes = st.columns(2)
+                    with col_load_prev:
+                        if st.button("载入为前文", use_container_width=True):
+                            st.session_state["diary_previous_entry"] = selected_entry.get("content", "")
+                            st.session_state["diary_continuous_mode"] = True
+                            st.success("已载入到连续续写前文")
+                            st.rerun()
+                    with col_load_notes:
+                        if st.button("载入为草稿", use_container_width=True):
+                            st.session_state["diary_notes"] = selected_entry.get("notes", selected_entry.get("content", ""))
+                            st.session_state["diary_date_hint"] = selected_entry.get("created_at", "")
+                            st.success("已载入到当前草稿")
+                            st.rerun()
+
+                    if st.button("🗑️ 删除当前日记", use_container_width=True):
+                        if delete_diary_entry(selected_id):
+                            st.session_state["diary_library"] = load_diary_library()
+                            st.success("日记已删除")
+                            st.rerun()
+                else:
+                    st.info("请选择一篇日记查看或调用。")
+            else:
+                st.info("还没有保存过日记。生成后可以点击保存到日记库。")
 
     return {
         "api_key": api_key_input.strip(),
@@ -836,6 +897,32 @@ def main():
                 else:
                     st.markdown("")
                     st.info("日记补全模式下已跳过评分优化，直接保留事实并补全表达即可。")
+
+                if task_mode == "日记补全":
+                    st.markdown("")
+                    diary_save_title = st.text_input(
+                        "保存标题",
+                        value=st.session_state.get("diary_save_title", "") or (st.session_state.get("diary_date_hint", "") or input_text[:18]),
+                        placeholder="给这篇日记起个名字",
+                        key="diary_save_title_input",
+                    )
+                    st.session_state["diary_save_title"] = diary_save_title
+                    if st.button("💾 保存到日记库", use_container_width=True):
+                        try:
+                            entry_id = save_diary_entry(
+                                title=diary_save_title,
+                                content=result_text,
+                                notes=input_text,
+                                style_name=display_style,
+                                mode="连续多天续写" if st.session_state.get("diary_continuous_mode") else "普通补全",
+                                previous_entry=st.session_state.get("diary_previous_entry", ""),
+                            )
+                            st.session_state["diary_library"] = load_diary_library()
+                            st.session_state["selected_diary_id"] = entry_id
+                            st.success("✅ 已保存到日记库")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"保存失败：{e}")
 
             history_style = f"日记补全·{display_style}" if task_mode == "日记补全" else display_style
             _add_to_history(input_text, history_style, result_text)
